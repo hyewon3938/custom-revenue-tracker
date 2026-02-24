@@ -62,11 +62,14 @@ export async function setDateInputRange(
  */
 
 const SEL = {
-  // 판매분析 날짜 범위 토글 버튼 (달력 열기)
+  // 판매분석 날짜 범위 토글 버튼 (달력 열기)
   toggleButton: 'a[data-test-id="DateRangeFixedArea_click_toggle"]',
   calendar: ".calendar_lypop",
   applyButton: 'div.btn_status span.select_range', // "적용" 버튼
   searchButton: 'button.size_large.type_green:has-text("검색")',
+  // react-datepicker 커스텀 헤더 이전/다음 버튼
+  prevMonth: ".react-datepicker__navigation--previous",
+  nextMonth: ".react-datepicker__navigation--next",
 } as const;
 
 /**
@@ -115,11 +118,17 @@ async function getCurrentCalendarMonth(
   return { year, month };
 }
 
-/** 달력을 목표 연월까지 이전/다음 버튼으로 이동 */
+/**
+ * 달력을 목표 연월까지 이전/다음 버튼으로 이동.
+ * prevSel / nextSel: data-testid 기반 셀렉터 (testidFrom에서 파생)
+ *   예) "[data-testid*='PrevMonth::PeriodPicker::From']"
+ */
 async function navigateToMonth(
   page: Frame,
   targetYear: number,
-  targetMonth: number
+  targetMonth: number,
+  prevSel: string,
+  nextSel: string
 ): Promise<void> {
   const MAX_CLICKS = 24; // 최대 2년 이동
   for (let i = 0; i < MAX_CLICKS; i++) {
@@ -129,9 +138,11 @@ async function navigateToMonth(
     const prevText = `${year}.${String(month).padStart(2, "0")}`;
     const diff = (targetYear - year) * 12 + (targetMonth - month);
     if (diff > 0) {
-      await page.click(SEL.nextMonth);
+      await page.waitForSelector(nextSel, { state: "visible", timeout: 5_000 });
+      await page.click(nextSel);
     } else {
-      await page.click(SEL.prevMonth);
+      await page.waitForSelector(prevSel, { state: "visible", timeout: 5_000 });
+      await page.click(prevSel);
     }
 
     // 헤더 텍스트가 바뀔 때까지 대기 (클릭 직후 DOM 업데이트 보장)
@@ -157,35 +168,65 @@ async function navigateToMonth(
 /**
  * readonly 날짜 인풋(클릭 시 react-datepicker 오픈) 방식 날짜 범위 설정.
  *
- * 대상: 네이버 정산내역 (`/e/v3/settlemgt/`)
- * - 날짜 인풋: input[title="날짜선택"] readonly (클릭 → 달력 오픈)
- * - 검색 버튼: button.size_large.type_green:has-text("검색")
+ * 대상:
+ *   - 네이버 정산내역: testidFrom="Input::DateRange::From" (기본값)
+ *   - 네이버 주문통합검색: testidFrom="Input::PeriodPicker::From"
  */
 export async function setDateRangeWithCalendar(
   frame: Frame,
   year: number,
-  month: number
+  month: number,
+  testidFrom = "Input::DateRange::From",
+  testidTo = "Input::DateRange::To"
 ): Promise<void> {
   const endDay = calcEndDay(year, month);
 
-  // data-testid 부분 일치로 시작일/종료일 인풋 특정
-  // (input[title="날짜선택"]이 페이지에 여러 개일 수 있어 nth(0) 오작동 방지)
-  const startInput = frame.locator('[data-testid*="Input::DateRange::From"]');
-  const endInput = frame.locator('[data-testid*="Input::DateRange::To"]');
+  const startInput = frame.locator(`[data-testid*="${testidFrom}"]`);
+  const endInput = frame.locator(`[data-testid*="${testidTo}"]`);
 
-  // 시작일: 인풋 클릭 → 캘린더 오픈 → 1일 선택
-  await startInput.click();
-  await frame.waitForSelector(".react-datepicker", { state: "visible", timeout: 5_000 });
-  await navigateToMonth(frame, year, month);
-  await clickCalendarDay(frame, 1);
-  await frame.waitForTimeout(300);
+  // testid ("Input::PeriodPicker::From") → prev/next 셀렉터 파생
+  // 시작일 캘린더: "PeriodPicker::From" 기반
+  // 종료일 캘린더: "PeriodPicker::To" 기반 (별도 버튼)
+  const mkNavSels = (testid: string) => {
+    const part = testid.replace("Input::", "");
+    return {
+      prev: `[data-testid*="PrevMonth::${part}"]`,
+      next: `[data-testid*="NextMonth::${part}"]`,
+    };
+  };
 
-  // 종료일: 인풋 클릭 → 캘린더 오픈 → 말일/어제 선택
-  await endInput.click();
-  await frame.waitForSelector(".react-datepicker", { state: "visible", timeout: 5_000 });
-  await navigateToMonth(frame, year, month);
-  await clickCalendarDay(frame, endDay);
-  await frame.waitForTimeout(300);
+  // 캘린더를 열고 대상 날짜를 클릭하는 헬퍼.
+  // INPUT 클릭 후 .react-datepicker가 나타나지 않으면 BUTTON으로 재시도.
+  const openAndPick = async (
+    triggerInput: ReturnType<typeof frame.locator>,
+    day: number,
+    navSels: { prev: string; next: string }
+  ) => {
+    // INPUT 클릭
+    await triggerInput.click();
+    const calendarVisible = await frame
+      .waitForSelector(".react-datepicker", { state: "visible", timeout: 3_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    // 캘린더가 안 열리면 BUTTON testid로 재시도
+    if (!calendarVisible) {
+      const btnTestid = (await triggerInput.getAttribute("data-testid") ?? "")
+        .replace("Input::", "Button::");
+      await frame.click(`[data-testid="${btnTestid}"]`);
+      await frame.waitForSelector(".react-datepicker", { state: "visible", timeout: 5_000 });
+    }
+
+    await navigateToMonth(frame, year, month, navSels.prev, navSels.next);
+    await clickCalendarDay(frame, day);
+    await frame.waitForTimeout(300);
+  };
+
+  // 시작일: 1일 (From 캘린더 버튼 사용)
+  await openAndPick(startInput, 1, mkNavSels(testidFrom));
+
+  // 종료일: 말일/어제 (To 캘린더 버튼 사용)
+  await openAndPick(endInput, endDay, mkNavSels(testidTo));
 
   // 검색
   await frame.click('button.size_large.type_green:has-text("검색")');

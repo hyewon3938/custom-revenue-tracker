@@ -1,7 +1,7 @@
-import { Page } from "playwright";
+import { Page, Frame } from "playwright";
 import { ProductSales, ProductCategory } from "@/lib/types";
 import { NAVER_URLS, getContentFrame } from "./naver-auth";
-import { selectMonthRangeAndSearch } from "./naver-datepicker";
+import { setDateRangeWithCalendar } from "./naver-datepicker";
 
 /** 상품명으로 카테고리 자동 판별 (끈갈피 = handmade) */
 export function detectCategory(productName: string): ProductCategory {
@@ -12,10 +12,92 @@ export function detectCategory(productName: string): ProductCategory {
 }
 
 /**
- * 네이버 주문통합검색 → 제품별 판매 수량/매출 추출
- * 대상 URL: https://sell.smartstore.naver.com/#/naverpay/manage/order
+ * TOAST UI Grid에서 현재 페이지의 주문 행을 추출.
  *
- * 실제 콘텐츠는 /o/v3/manage/order iframe 안에 있음.
+ * TOAST UI Grid 구조 (확정):
+ *   table.tui-grid-table (마지막) > tbody tr
+ *   td[7] = 상품명, td[9] = 수량
+ *   "취소"가 포함된 행은 건너뜀.
+ */
+async function extractOrderRows(
+  frame: Frame
+): Promise<{ productName: string; quantity: number }[]> {
+  return frame.evaluate(() => {
+    const tables = Array.from(
+      document.querySelectorAll("table.tui-grid-table")
+    );
+    const table = tables[tables.length - 1];
+    if (!table) return [];
+
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+    const results: { productName: string; quantity: number }[] = [];
+
+    for (const row of rows) {
+      const cells = Array.from(row.querySelectorAll("td"));
+      if (cells.length < 10) continue;
+
+      // 취소 주문 건너뜀 (앞 5개 셀에서 "취소" 텍스트 확인)
+      const rowText = Array.from(cells)
+        .slice(0, 5)
+        .map((c) => c.textContent ?? "")
+        .join("");
+      if (rowText.includes("취소")) continue;
+
+      const productName = cells[7]?.textContent?.trim() ?? "";
+      const quantityText = cells[9]?.textContent?.trim() ?? "0";
+      const quantity = parseInt(quantityText.replace(/[^\d]/g, "")) || 0;
+
+      if (!productName || quantity <= 0) continue;
+      results.push({ productName, quantity });
+    }
+
+    return results;
+  });
+}
+
+/**
+ * 다음 페이지 버튼 클릭. 더 이상 없으면 false 반환.
+ * 주문통합검색 페이지네이션: naver-settlement와 동일한 div.npay_grid_area 구조.
+ */
+async function goToNextPage(frame: Frame): Promise<boolean> {
+  return frame.evaluate(() => {
+    const gridArea = document.querySelector("div.npay_grid_area");
+    if (!gridArea) return false;
+
+    const gridDiv = gridArea.querySelector("div.grid");
+    if (!gridDiv) return false;
+
+    // div.grid 다음 형제 중 첫 번째 DIV가 페이지네이션 컨테이너
+    let paginationContainer: Element | null = null;
+    let sibling = gridDiv.nextElementSibling;
+    while (sibling) {
+      if (sibling.tagName === "DIV") { paginationContainer = sibling; break; }
+      sibling = sibling.nextElementSibling;
+    }
+    if (!paginationContainer) return false;
+
+    // 컨테이너 안 직접 자식 중 현재 페이지(<strong>) 찾기
+    const children = Array.from(paginationContainer.children);
+    const searchScope = children.length > 0 ? children : [paginationContainer];
+
+    const currentIdx = searchScope.findIndex(
+      (el) => el.querySelector("strong") || el.tagName === "STRONG"
+    );
+    if (currentIdx === -1) return false;
+
+    const nextBtn = searchScope[currentIdx + 1];
+    if (!nextBtn || !/^\d+$/.test(nextBtn.textContent?.trim() ?? ""))
+      return false;
+
+    (nextBtn as HTMLElement).click();
+    return true;
+  });
+}
+
+/**
+ * 네이버 주문통합검색 → 제품별 판매 수량 집계
+ * 대상: https://sell.smartstore.naver.com/#/naverpay/manage/order
+ * iframe: /o/v3/manage/order
  */
 export async function scrapeNaverOrders(
   page: Page,
@@ -23,60 +105,50 @@ export async function scrapeNaverOrders(
   month: number
 ): Promise<ProductSales[]> {
   await page.goto(NAVER_URLS.orders);
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("load");
+  if (page.url().includes("login")) {
+    throw new Error("네이버 세션이 만료되었습니다. 다시 로그인 후 수집하세요.");
+  }
 
   const frame = await getContentFrame(page);
 
-  // ── 날짜 범위 선택 + 검색 ────────────────────────────────────────────
-  await selectMonthRangeAndSearch(frame, year, month);
-  // ────────────────────────────────────────────────────────────────────────
+  // 주문통합검색 날짜 인풋은 readonly → 캘린더 클릭 방식으로 설정
+  await setDateRangeWithCalendar(
+    frame, year, month,
+    "Input::PeriodPicker::From",
+    "Input::PeriodPicker::To"
+  );
+
+  // 결과 테이블 로드 대기
+  await frame.waitForSelector("table.tui-grid-table", { timeout: 15_000 });
 
   const productMap = new Map<string, ProductSales>();
 
-  // ── 주문 목록 파싱 (페이징 전체 순회) ────────────────────────────────
-  // TODO: 아래 셀렉터를 실제 DOM에 맞게 교체 필요
-  //
-  // let hasNextPage = true;
-  // while (hasNextPage) {
-  //   const rows = await frame.$$("TODO: 주문 테이블 행 셀렉터");
-  //   for (const row of rows) {
-  //     const productName =
-  //       (await row.$eval("TODO: 상품명 셀", (el) => el.textContent))
-  //         ?.trim() ?? "";
-  //     const quantity = parseInt(
-  //       (await row.$eval("TODO: 수량 셀", (el) => el.textContent))
-  //         ?.replace(/[^\d]/g, "") ?? "0"
-  //     );
-  //     const revenue = parseInt(
-  //       (await row.$eval("TODO: 주문금액 셀", (el) => el.textContent))
-  //         ?.replace(/[^\d]/g, "") ?? "0"
-  //     );
-  //
-  //     if (!productName) continue;
-  //     if (!productMap.has(productName)) {
-  //       productMap.set(productName, {
-  //         productId: productName,
-  //         productName,
-  //         category: detectCategory(productName),
-  //         platform: "naver",
-  //         quantity: 0,
-  //         revenue: 0,
-  //       });
-  //     }
-  //     const entry = productMap.get(productName)!;
-  //     entry.quantity += quantity;
-  //     entry.revenue += revenue;
-  //   }
-  //
-  //   const nextBtn = await frame.$("TODO: 다음 페이지 버튼:not([disabled])");
-  //   if (nextBtn) {
-  //     await nextBtn.click();
-  //     await frame.waitForLoadState("networkidle");
-  //   } else {
-  //     hasNextPage = false;
-  //   }
-  // }
-  // ────────────────────────────────────────────────────────────────────────
+  // 전체 페이지 순회
+  let pageIndex = 0;
+  while (true) {
+    if (pageIndex > 0) {
+      // 페이지 전환 후 테이블 재렌더링 대기
+      await frame.waitForTimeout(1_000);
+    }
+
+    const rows = await extractOrderRows(frame);
+    for (const { productName, quantity } of rows) {
+      if (!productMap.has(productName)) {
+        productMap.set(productName, {
+          productName,
+          category: detectCategory(productName),
+          platform: "naver",
+          quantity: 0,
+        });
+      }
+      productMap.get(productName)!.quantity += quantity;
+    }
+
+    const hasNext = await goToNextPage(frame);
+    if (!hasNext) break;
+    pageIndex++;
+  }
 
   return Array.from(productMap.values());
 }
