@@ -235,9 +235,9 @@ export async function collectMonthlyData(
   const mapping = await loadProductMapping();
 
   const summary = calcOverallSummary(naverData, coupangData, offline);
-  const naverRanking = calcPlatformRanking(naverData.products, 3);
-  const coupangRanking = calcPlatformRanking(coupangData.products, 3);
-  const offlineRanking = calcPlatformRanking(offline.products, 3);
+  const naverRanking = calcPlatformRanking(naverData.products, 3, mapping);
+  const coupangRanking = calcPlatformRanking(coupangData.products, 3, mapping);
+  const offlineRanking = calcPlatformRanking(offline.products, 3, mapping);
   const overallRanking = calcOverallRanking(
     naverData.products,
     coupangData.products,

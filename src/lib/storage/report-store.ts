@@ -106,9 +106,9 @@ export async function updateReport(
     coupangWithProfit,
     offlineWithProfit
   );
-  const naverRanking = calcPlatformRanking(naverWithProfit.products, 3);
-  const coupangRanking = calcPlatformRanking(coupangWithProfit.products, 3);
-  const offlineRanking = calcPlatformRanking(offlineWithProfit.products, 3);
+  const naverRanking = calcPlatformRanking(naverWithProfit.products, 3, mapping);
+  const coupangRanking = calcPlatformRanking(coupangWithProfit.products, 3, mapping);
+  const offlineRanking = calcPlatformRanking(offlineWithProfit.products, 3, mapping);
   const overallRanking = calcOverallRanking(
     naverWithProfit.products,
     coupangWithProfit.products,

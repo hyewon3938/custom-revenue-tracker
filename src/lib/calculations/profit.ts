@@ -108,24 +108,45 @@ export function calcOverallSummary(
 /** 단일 플랫폼 상품 목록에서 TOP N 랭킹 생성 */
 export function calcPlatformRanking(
   products: ProductSales[],
-  topN: number
+  topN: number,
+  mapping: ProductMappingConfig | null = null
 ): ProductRankEntry[] {
   const platform = products[0]?.platform;
-  const map = new Map<string, number>();
 
+  // canonical명 결정 — mapping 있을 때만 적용
+  const toCanonical = (name: string): string => {
+    if (!mapping) return name;
+    const m = mapping.mappings.find((m) =>
+      platform === "naver"
+        ? m.naver === name
+        : platform === "coupang"
+        ? m.coupang === name
+        : m.canonical === name
+    );
+    return m?.canonical ?? name;
+  };
+
+  // canonical명 기준으로 합산
+  const map = new Map<string, { qty: number; rawName: string }>();
   for (const p of products) {
-    map.set(p.productName, (map.get(p.productName) ?? 0) + p.quantity);
+    const key = toCanonical(p.productName);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { qty: p.quantity, rawName: p.productName });
+    } else {
+      existing.qty += p.quantity;
+    }
   }
 
   return Array.from(map.entries())
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].qty - a[1].qty)
     .slice(0, topN)
-    .map(([name, qty], idx) => {
+    .map(([canonicalName, { qty, rawName }], idx) => {
       const category =
-        products.find((p) => p.productName === name)?.category ?? "other";
+        products.find((p) => p.productName === rawName)?.category ?? "other";
       return {
         rank: idx + 1,
-        productName: name,
+        productName: canonicalName,
         category,
         total: qty,
         naver: platform === "naver" ? qty : 0,
