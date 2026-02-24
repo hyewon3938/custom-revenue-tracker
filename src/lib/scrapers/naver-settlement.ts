@@ -100,16 +100,39 @@ export async function scrapeNaverSettlement(
     await frame.waitForTimeout(500);
   } catch {}
 
+  // DateRange 캘린더 입력 필드가 렌더링될 때까지 대기
+  // (이전 페이지에서 넘어올 때 iframe 초기화 지연 방지)
+  await frame.waitForSelector('[data-testid*="Input::DateRange::From"]', {
+    timeout: 20_000,
+  });
+  await frame.waitForTimeout(300);
+
   // readonly 인풋 클릭 → 캘린더 선택 방식
   await setDateRangeWithCalendar(frame, year, month);
 
-  // 결과 테이블 로드 대기 — 마지막 tui-grid-table에 데이터 행이 생길 때까지
+  // 검색 결과 반영 대기:
+  // 기본 뷰가 이미 테이블에 있어 rows > 0 만으로는 불충분.
+  // 첫 번째 데이터 행의 날짜가 조회 월과 일치할 때까지 대기.
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const monthPrefix1 = `${year}.${pad(month)}`; // "2026.01"
+  const monthPrefix2 = `${year}-${pad(month)}`; // "2026-01"
   await frame.waitForFunction(
-    () => {
+    ({ p1, p2 }: { p1: string; p2: string }) => {
       const tables = document.querySelectorAll("table.tui-grid-table");
       const last = tables[tables.length - 1];
-      return last && last.querySelectorAll("tbody tr").length > 0;
+      if (!last) return false;
+      const rows = Array.from(last.querySelectorAll("tbody tr"));
+      // 데이터가 없는 달이면 행이 0개 → 로드 완료로 간주
+      if (rows.length === 0) return true;
+      for (const row of rows) {
+        const text = row.querySelector("td")?.textContent?.trim() ?? "";
+        if (/^\d{4}/.test(text)) {
+          return text.startsWith(p1) || text.startsWith(p2);
+        }
+      }
+      return false;
     },
+    { p1: monthPrefix1, p2: monthPrefix2 },
     { timeout: 15_000 }
   );
 
