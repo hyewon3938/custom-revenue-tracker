@@ -11,11 +11,11 @@ import { setDateRangeWithCalendar } from "../src/lib/scrapers/naver-datepicker";
 import { scrapeCoupangSalesAnalysis } from "../src/lib/scrapers/coupang-sales";
 import { scrapeCoupangSettlement } from "../src/lib/scrapers/coupang-settlement";
 
-const YEAR = 2026, MONTH = 2;
+const YEAR = 2025, MONTH = 10;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 async function testNaverSales() {
-  console.log("\n=== 네이버 판매분석 ===");
+  console.log("\n=== 네이버 판매분析 ===");
   const browser = await chromium.launch({ headless: false });
   const ctx = await browser.newContext({ userAgent: UA });
   const page = await ctx.newPage();

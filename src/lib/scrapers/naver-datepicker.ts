@@ -62,13 +62,10 @@ export async function setDateInputRange(
  */
 
 const SEL = {
-  fromButton:
-    '[data-testid="DatePicker::Button::PeriodPicker::From::"]',
-  toButton:
-    '[data-testid="DatePicker::Button::PeriodPicker::To::"]',
-  calendar: ".react-datepicker",
-  prevMonth: '.react-datepicker__header--custom button:has-text("이전 달")',
-  nextMonth: '.react-datepicker__header--custom button:has-text("다음 달")',
+  // 판매분析 날짜 범위 토글 버튼 (달력 열기)
+  toggleButton: 'a[data-test-id="DateRangeFixedArea_click_toggle"]',
+  calendar: ".calendar_lypop",
+  applyButton: 'div.btn_status span.select_range', // "적용" 버튼
   searchButton: 'button.size_large.type_green:has-text("검색")',
 } as const;
 
@@ -202,6 +199,58 @@ export async function setDateRangeWithCalendar(
  * @param year    조회 연도
  * @param month   조회 월 (1~12)
  */
+/**
+ * calendar_lypop 달력에서 특정 연월로 이동.
+ * 헤더 텍스트 "YYYY년 MM월" 형식 기준으로 이전/다음 버튼 클릭.
+ */
+/**
+ * calendar_lypop (DayPicker 라이브러리) 달력에서 특정 연월로 이동.
+ * 헤더: div.DayPicker-Caption "YYYY. MM."
+ * 이전/다음: div.DayPicker-NavButton--prev / --next
+ */
+async function navigateToMonthLypop(
+  page: Frame,
+  targetYear: number,
+  targetMonth: number
+): Promise<void> {
+  const MAX_CLICKS = 24;
+  for (let i = 0; i < MAX_CLICKS; i++) {
+    const { year, month } = await page.evaluate(() => {
+      const caption = document.querySelector(".DayPicker-Caption");
+      const text = caption?.textContent?.trim() ?? "";
+      // "2026. 02." 형식
+      const m = text.match(/(\d{4})\.\s*(\d{2})/);
+      if (m) return { year: Number(m[1]), month: Number(m[2]) };
+      return { year: 0, month: 0 };
+    });
+
+    if (year === targetYear && month === targetMonth) return;
+    if (year === 0) throw new Error("DayPicker-Caption에서 연월을 찾을 수 없습니다.");
+
+    const diff = (targetYear - year) * 12 + (targetMonth - month);
+    if (diff > 0) {
+      await page.click(".DayPicker-NavButton--next");
+    } else {
+      await page.click(".DayPicker-NavButton--prev");
+    }
+    await page.waitForTimeout(300);
+  }
+  throw new Error(`DayPicker: ${targetYear}년 ${targetMonth}월에 도달하지 못했습니다.`);
+}
+
+/**
+ * calendar_lypop (DayPicker) 달력에서 날짜 셀 클릭.
+ * DayPicker-Day 클래스, outside/disabled 제외.
+ */
+async function clickLypopDay(page: Frame, day: number): Promise<void> {
+  const cell = page
+    .locator(".DayPicker-Day:not(.DayPicker-Day--outside):not(.DayPicker-Day--disabled)")
+    .filter({ hasText: new RegExp(`^${day}$`) })
+    .first();
+  await cell.waitFor({ state: "visible", timeout: 5_000 });
+  await cell.click();
+}
+
 export async function selectMonthRangeAndSearch(
   page: Frame,
   year: number,
@@ -209,19 +258,21 @@ export async function selectMonthRangeAndSearch(
 ): Promise<void> {
   const endDay = calcEndDay(year, month);
 
-  // 1) 시작일: 해당 월 1일 선택
-  await page.click(SEL.fromButton);
-  await page.waitForSelector(SEL.calendar, { state: "visible" });
-  await navigateToMonth(page, year, month);
-  await clickCalendarDay(page, 1);
+  // 1) 토글 버튼 클릭 → calendar_lypop 달력 오픈
+  await page.click(SEL.toggleButton);
+  await page.waitForSelector(SEL.calendar, { state: "visible", timeout: 10_000 });
+  await navigateToMonthLypop(page, year, month);
 
-  // 2) 종료일: 말일(과거 월) 또는 어제(현재 월)
-  await page.click(SEL.toButton);
-  await page.waitForSelector(SEL.calendar, { state: "visible" });
-  await navigateToMonth(page, year, month);
-  await clickCalendarDay(page, endDay);
+  // 2) 시작일(1일) 클릭
+  await clickLypopDay(page, 1);
+  await page.waitForTimeout(300);
 
-  // 3) 검색
-  await page.click(SEL.searchButton);
+  // 3) 종료일 클릭
+  await navigateToMonthLypop(page, year, month);
+  await clickLypopDay(page, endDay);
+  await page.waitForTimeout(300);
+
+  // 4) 적용 버튼 클릭
+  await page.click(SEL.applyButton);
   await page.waitForLoadState("networkidle");
 }
