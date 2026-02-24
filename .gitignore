@@ -1,0 +1,48 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# playwright
+/playwright-report/
+/test-results/
+
+# 브라우저 세션 (로그인 상태 저장 - 절대 커밋하지 말 것)
+/.browser-session/
+
+# 실제 수집된 매출 데이터 (개인 사업 정보 - 커밋하지 말 것)
+/data/reports/*.json
+
+# 테스트 스크린샷
+/scripts/*.png
