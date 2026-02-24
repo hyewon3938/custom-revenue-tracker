@@ -72,16 +72,46 @@ async function readDpCalendarMonth(
 }
 
 /**
+ * dp__ 날짜 셀 클릭 (문자열 스크립트 사용).
+ * page.click()이 <html> 포인터 이벤트 인터셉트로 실패하는 경우 대응.
+ * tsx/esbuild의 __name 헬퍼 주입을 피하기 위해 문자열 형태의 evaluate 사용.
+ * 동일 id가 2개(1월 overflow + 2월 패널)일 때는 마지막 요소를 클릭.
+ */
+async function clickDpCell(page: Page, cellId: string): Promise<void> {
+  await page.evaluate(`
+    (function() {
+      var els = document.querySelectorAll('[id="${cellId}"]');
+      if (els.length === 0) throw new Error('dp__ cell not found: ${cellId}');
+      var el = els[els.length - 1];
+      el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent("mouseup",   { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent("click",     { bubbles: true, cancelable: true }));
+    })()
+  `);
+  await page.waitForTimeout(500);
+}
+
+/**
  * 쿠팡 판매분석 dp__ 캘린더를 목표 연월로 이동.
  * 이전 달 버튼: [class*="_prev_"]
+ *
+ * range picker는 두 달을 동시에 표시하므로
+ * 목표 월 날짜 셀(id="dp-YYYY-MM-01")이 이미 DOM에 있으면 이동 불필요.
  */
 async function navigateDpCalendarToMonth(
   page: Page,
   targetYear: number,
   targetMonth: number
 ): Promise<void> {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const probeId = `dp-${targetYear}-${p(targetMonth)}-01`;
   const MAX = 24;
+
   for (let i = 0; i < MAX; i++) {
+    // 목표 월 날짜 셀이 이미 달력에 보이면 이동 불필요 (2-month range picker 대응)
+    const visible = await page.$(`[id="${probeId}"]`);
+    if (visible) return;
+
     const { year, month } = await readDpCalendarMonth(page);
     if (year === targetYear && month === targetMonth) return;
 
@@ -136,103 +166,104 @@ export async function scrapeCoupangSalesAnalysis(
   const startId = `dp-${year}-${pad(month)}-01`;
   const endId = `dp-${year}-${pad(month)}-${pad(endDay)}`;
 
-  // 날짜 필터 트리거 클릭 — 팝업이 다시 뜰 수 있으므로 닫은 뒤 클릭
+  // 날짜 필터 트리거 클릭
+  // 실제 HTML: <div class="_container_podij_1 context-trigger-filter" ...>
+  //   <span>최근 7일</span><i title="calendar">
+  // 페이지에 context-trigger-filter 가 여러 개 있으므로 "최근 7일" 텍스트로 특정
   await dismissPopup(page);
-  const triggerSelectors = [
-    '[class*="_date-range-picker_"]',
-    '[class*="date-range-trigger"]',
-    '[class*="date-filter"]',
-  ];
-  let triggered = false;
-  for (const sel of triggerSelectors) {
-    try {
-      await page.click(sel, { timeout: 2_000 });
-      triggered = true;
-      break;
-    } catch {
-      // 다음 셀렉터 시도
-    }
-  }
-  if (!triggered) {
-    // fallback: "최근 7일" 텍스트로 트리거
-    try {
-      await page.click(':text("최근 7일")', { timeout: 2_000 });
-    } catch {
-      // 이미 열려있을 수 있음 — 계속 진행
-    }
+  try {
+    await page.click('div.context-trigger-filter:has-text("최근 7일")', {
+      timeout: 5_000,
+    });
+  } catch {
+    // 이미 열려있을 수 있음 — 계속 진행
   }
 
-  // 달력 열릴 때까지 대기 (팝업이 다시 나타났으면 먼저 닫기)
-  await dismissPopup(page);
+  // 달력 열릴 때까지 대기
+  // 실제 HTML: <div class="_calendar-header_1uc11_20"><span>2026년 1월</span></div>
+  // dp__ 달력이 두 달(이전달+이번달)을 표시하므로 startId 셀이 바로 보임
   await page.waitForSelector(`[id="${startId}"]`, { timeout: 10_000 });
 
-  // 시작일 선택
+  // 시작일 선택 (JS evaluate 클릭 — <html> 포인터 인터셉트 우회)
   await navigateDpCalendarToMonth(page, year, month);
-  await page.click(`[id="${startId}"]`);
+  await clickDpCell(page, startId);
 
   // 종료일 선택 (같은 달)
   await navigateDpCalendarToMonth(page, year, month);
-  await page.click(`[id="${endId}"]`);
+  await clickDpCell(page, endId);
 
-  // 확인 버튼 ("MM.DD ~ MM.DD' 선택 완료" 형식)
-  await page.click('button:has-text("선택 완료")');
-  await page.waitForLoadState("networkidle");
+  // 확인 버튼: 'MM.DD (요일) ~ MM.DD (요일)' 선택 완료
+  // 실제 HTML: <button data-wuic-props="name:btn type:primary size:l">...선택 완료</button>
+  await page.click('button[data-wuic-props*="type:primary"]:has-text("선택 완료")');
 
-  // 제품 컨테이너 로드 대기
-  await page.waitForSelector(
-    '[class*="_container_1pewv_1"][class*="_with-product_"]',
-    { timeout: 15_000 }
+  // "판매량" 리프 노드가 컨테이너에 실제로 나타날 때까지 대기
+  // (waitForSelector는 기존 컨테이너를 즉시 찾으므로 데이터 로드 미확인)
+  // 상품명 구조: <strong>(class=null, leaf) "제품명"
+  // 판매량 구조: _label_1agud_ > span "판매량 " → leaf node
+  await page.waitForFunction(
+    `(function() {
+      var container = document.querySelector('[class*="_container_1pewv_1"][class*="_with-product_"]');
+      if (!container) return false;
+      var els = container.querySelectorAll('*');
+      for (var i = 0; i < els.length; i++) {
+        if (els[i].children.length === 0 && (els[i].textContent || '').trim() === '판매량') return true;
+      }
+      return false;
+    })()`,
+    { timeout: 30_000 }
   );
 
   // 제품 데이터 + 총 매출 추출
-  const data = await page.evaluate(() => {
-    const parseNum = (text: string | null | undefined): number => {
-      if (!text) return 0;
-      return parseInt(text.replace(/,/g, "")) || 0;
-    };
+  // 문자열 스크립트 사용 — tsx/esbuild __name 헬퍼 주입 방지
+  const data = await page.evaluate(`
+    (function() {
+      function parseNum(text) {
+        if (!text) return 0;
+        return parseInt(text.replace(/,/g, '')) || 0;
+      }
 
-    const container = document.querySelector(
-      '[class*="_container_1pewv_1"][class*="_with-product_"]'
-    );
-    if (!container) return { totalRevenue: 0, products: [] };
+      var container = document.querySelector(
+        '[class*="_container_1pewv_1"][class*="_with-product_"]'
+      );
+      if (!container) return { totalRevenue: 0, products: [] };
 
-    // 모든 리프 텍스트 노드 수집
-    const allEls = Array.from(container.querySelectorAll("*")).filter(
-      (el) => el.children.length === 0 && (el.textContent?.trim() ?? "")
-    );
+      var allEls = Array.from(container.querySelectorAll('*')).filter(function(el) {
+        return el.children.length === 0 && (el.textContent || '').trim();
+      });
 
-    const products: { productName: string; quantity: number; revenue: number }[] = [];
-    let totalRevenue = 0;
+      var products = [];
+      var totalRevenue = 0;
 
-    for (let i = 0; i < allEls.length; i++) {
-      if (allEls[i].textContent?.trim() !== "판매량") continue;
+      for (var i = 0; i < allEls.length; i++) {
+        if ((allEls[i].textContent || '').trim() !== '판매량') continue;
 
-      // 수량: "판매량" 바로 앞 요소
-      const quantity = parseNum(allEls[i - 1]?.textContent);
+        var quantity = parseNum(allEls[i - 1] ? allEls[i - 1].textContent : null);
+        var revenue  = parseNum(allEls[i + 2] ? allEls[i + 2].textContent : null);
+        totalRevenue += revenue;
 
-      // 매출: "판매량" 이후 2번째 요소 (판매량 → % → 매출액)
-      const revenue = parseNum(allEls[i + 2]?.textContent);
-      totalRevenue += revenue;
+        // 상품명: <strong> 태그를 역방향 탐색
+        // 실제 구조: <p class="_common_ghzur_1 _ellipsis_dlsk5_12">
+        //              <span class="" href=""><span><strong>상품명</strong>, 1개</span></span>
+        //            </p>
+        // "카테고리: 책갈피/북마크"보다 더 앞에 있으므로 STRONG 태그로 특정
+        var productName = '';
+        for (var j = i - 2; j >= Math.max(0, i - 60); j--) {
+          var el  = allEls[j];
+          var txt = (el.textContent || '').trim();
+          if (el.tagName === 'STRONG' && /[가-힣]/.test(txt)) {
+            productName = txt;
+            break;
+          }
+        }
 
-      // 상품명: "판매량" 앞에서 class 없는 한글 텍스트 요소를 역방향 탐색
-      let productName = "";
-      for (let j = i - 2; j >= Math.max(0, i - 30); j--) {
-        const el = allEls[j];
-        const cls = el.getAttribute("class");
-        const text = el.textContent?.trim() ?? "";
-        if ((cls === null || cls === "") && /[가-힣]/.test(text) && text.length > 1) {
-          productName = text;
-          break;
+        if (productName && quantity > 0) {
+          products.push({ productName: productName, quantity: quantity, revenue: revenue });
         }
       }
 
-      if (productName && quantity > 0) {
-        products.push({ productName, quantity, revenue });
-      }
-    }
-
-    return { totalRevenue, products };
-  });
+      return { totalRevenue: totalRevenue, products: products };
+    })()
+  `) as { totalRevenue: number; products: { productName: string; quantity: number; revenue: number }[] };
 
   const productSales: ProductSales[] = data.products.map((p) => ({
     productName: p.productName,
