@@ -4,6 +4,7 @@
  */
 import { chromium } from "playwright";
 import { loginCoupang } from "../src/lib/scrapers/coupang-auth";
+import { getValidSessionPath } from "../src/lib/scrapers/session-store";
 import { scrapeCoupangSalesAnalysis } from "../src/lib/scrapers/coupang-sales";
 import { scrapeCoupangSettlement } from "../src/lib/scrapers/coupang-settlement";
 
@@ -13,12 +14,16 @@ const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (
 const fmt = (n: number) => n.toLocaleString("ko-KR") + "원";
 
 (async () => {
+  const sessionPath = await getValidSessionPath("coupang");
   const browser = await chromium.launch({ headless: false });
-  const ctx = await browser.newContext({ userAgent: UA });
+  const ctx = await browser.newContext({
+    userAgent: UA,
+    ...(sessionPath ? { storageState: sessionPath } : {}),
+  });
   const page = await ctx.newPage();
 
   try {
-    await loginCoupang(page);
+    await loginCoupang(page, ctx);
     console.log("✅ 로그인 완료\n");
 
     // ── 판매분석 ──

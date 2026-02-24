@@ -1,4 +1,5 @@
-import { Page, Frame } from "playwright";
+import { Page, Frame, BrowserContext } from "playwright";
+import { saveSession } from "./session-store";
 
 export const NAVER_BASE = "https://sell.smartstore.naver.com";
 
@@ -65,14 +66,17 @@ const MANUAL_LOGIN_TIMEOUT = 5 * 60 * 1_000; // 5분
 /**
  * 네이버 스마트스토어 로그인.
  *
- * 브라우저를 열어 두고 최대 5분간 수동 로그인을 대기.
- * (2FA·캡차 대응)
+ * context를 전달하면 로그인 성공 후 세션을 자동 저장.
+ * 다음 실행 시 저장된 세션으로 로그인을 건너뜀 (TTL 이내인 경우).
  *
  * 로그인 완료 조건:
  *   - sell.smartstore.naver.com 도메인 위
  *   - login 관련 경로(nid.naver.com / accounts.commerce.naver.com / login-callback) 아님
  */
-export async function loginNaver(page: Page): Promise<void> {
+export async function loginNaver(
+  page: Page,
+  context?: BrowserContext
+): Promise<void> {
   await page.goto(NAVER_BASE);
 
   // JS 리다이렉트가 완료될 때까지 대기
@@ -94,6 +98,7 @@ export async function loginNaver(page: Page): Promise<void> {
     );
   };
 
+  // 세션 복원으로 이미 로그인된 경우
   if (isLoggedInUrl()) return;
 
   console.log(
@@ -104,6 +109,7 @@ export async function loginNaver(page: Page): Promise<void> {
     if (isLoggedInUrl()) {
       await page.waitForLoadState("load");
       await page.waitForTimeout(2_000);
+      if (context) await saveSession(context, "naver");
       return;
     }
     await new Promise((r) => setTimeout(r, 1_000));

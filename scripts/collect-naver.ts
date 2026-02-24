@@ -4,6 +4,7 @@
  */
 import { chromium } from "playwright";
 import { loginNaver } from "../src/lib/scrapers/naver-auth";
+import { getValidSessionPath } from "../src/lib/scrapers/session-store";
 import { scrapeNaverSalesAnalysis } from "../src/lib/scrapers/naver-sales";
 import { scrapeNaverSettlement } from "../src/lib/scrapers/naver-settlement";
 import { scrapeNaverOrders } from "../src/lib/scrapers/naver-orders";
@@ -14,12 +15,16 @@ const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (
 const fmt = (n: number) => n.toLocaleString("ko-KR") + "원";
 
 (async () => {
+  const sessionPath = await getValidSessionPath("naver");
   const browser = await chromium.launch({ headless: false });
-  const ctx = await browser.newContext({ userAgent: UA });
+  const ctx = await browser.newContext({
+    userAgent: UA,
+    ...(sessionPath ? { storageState: sessionPath } : {}),
+  });
   const page = await ctx.newPage();
 
   try {
-    await loginNaver(page);
+    await loginNaver(page, ctx);
     console.log("✅ 로그인 완료\n");
 
     // ── 판매분석 ──

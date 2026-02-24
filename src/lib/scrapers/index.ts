@@ -9,6 +9,7 @@ import {
 } from "@/lib/types";
 import { loginNaver } from "./naver-auth";
 import { loginCoupang } from "./coupang-auth";
+import { getValidSessionPath } from "./session-store";
 import { scrapeNaverOrders } from "./naver-orders";
 import { scrapeNaverSalesAnalysis } from "./naver-sales";
 import { scrapeNaverSettlement } from "./naver-settlement";
@@ -39,8 +40,12 @@ const EMPTY_SHIPPING_STATS: ShippingStats = {
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-/** 공통 브라우저 + 컨텍스트 + 페이지 생성 */
-async function createBrowserPage(): Promise<{
+/**
+ * 공통 브라우저 + 컨텍스트 + 페이지 생성.
+ * storageStatePath가 주어지면 저장된 쿠키/스토리지를 복원한다.
+ * 세션 파일이 손상된 경우 경고 후 빈 컨텍스트로 재시도.
+ */
+async function createBrowserPage(storageStatePath?: string | null): Promise<{
   browser: Browser;
   context: BrowserContext;
   page: Page;
@@ -49,7 +54,18 @@ async function createBrowserPage(): Promise<{
     headless: false,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
-  const context = await browser.newContext({ userAgent: BROWSER_UA });
+
+  let context: BrowserContext;
+  try {
+    context = await browser.newContext({
+      userAgent: BROWSER_UA,
+      ...(storageStatePath ? { storageState: storageStatePath } : {}),
+    });
+  } catch {
+    console.warn("[세션] 세션 파일 로드 실패 — 새 컨텍스트로 재시도");
+    context = await browser.newContext({ userAgent: BROWSER_UA });
+  }
+
   const page = await context.newPage();
   return { browser, context, page };
 }
@@ -82,10 +98,11 @@ async function collectNaverData(
   year: number,
   month: number
 ): Promise<NaverData> {
-  const { browser, context, page } = await createBrowserPage();
+  const sessionPath = await getValidSessionPath("naver");
+  const { browser, context, page } = await createBrowserPage(sessionPath);
 
   try {
-    await loginNaver(page);
+    await loginNaver(page, context);
 
     // 순차 수집 (세션 공유)
     const salesResult = await scrapeNaverSalesAnalysis(page, year, month).catch(
@@ -132,10 +149,11 @@ async function collectCoupangData(
   year: number,
   month: number
 ): Promise<CoupangData> {
-  const { browser, context, page } = await createBrowserPage();
+  const sessionPath = await getValidSessionPath("coupang");
+  const { browser, context, page } = await createBrowserPage(sessionPath);
 
   try {
-    await loginCoupang(page);
+    await loginCoupang(page, context);
 
     const salesResult = await scrapeCoupangSalesAnalysis(page, year, month).catch(
       (e) => { console.error("[coupang-sales]", e); return null; }

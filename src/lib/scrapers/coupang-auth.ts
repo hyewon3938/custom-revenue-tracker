@@ -1,4 +1,5 @@
-import { Page } from "playwright";
+import { Page, BrowserContext } from "playwright";
+import { saveSession } from "./session-store";
 
 export const COUPANG_BASE = "https://wing.coupang.com";
 
@@ -18,12 +19,16 @@ const MANUAL_LOGIN_TIMEOUT = 5 * 60 * 1_000; // 5분
 /**
  * 쿠팡 Wing 로그인.
  *
- * 브라우저를 열어 두고 최대 5분간 수동 로그인을 대기.
+ * context를 전달하면 로그인 성공 후 세션을 자동 저장.
+ * 다음 실행 시 저장된 세션으로 로그인을 건너뜀 (TTL 이내인 경우).
  *
  * 주의: wing.coupang.com은 지속적인 백그라운드 XHR이 있어
  *       waitForLoadState("networkidle")이 타임아웃됨 → "load" 사용.
  */
-export async function loginCoupang(page: Page): Promise<void> {
+export async function loginCoupang(
+  page: Page,
+  context?: BrowserContext
+): Promise<void> {
   await page.goto(COUPANG_BASE);
 
   // JS 리다이렉트가 완료될 때까지 대기
@@ -44,6 +49,7 @@ export async function loginCoupang(page: Page): Promise<void> {
     );
   };
 
+  // 세션 복원으로 이미 로그인된 경우
   if (isLoggedIn()) return;
 
   console.log(
@@ -54,6 +60,7 @@ export async function loginCoupang(page: Page): Promise<void> {
     if (isLoggedIn()) {
       await page.waitForLoadState("load");
       await page.waitForTimeout(1_500);
+      if (context) await saveSession(context, "coupang");
       return;
     }
     await new Promise((r) => setTimeout(r, 1_000));
