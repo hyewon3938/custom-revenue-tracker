@@ -39,21 +39,20 @@ async function dismissPopup(page: Page): Promise<void> {
 async function readDpCalendarMonth(
   page: Page
 ): Promise<{ year: number; month: number }> {
-  const text = await page.evaluate(() => {
-    const span = document.querySelector(
-      '[class*="_calendar-header_"] span, .dp__calendar_header_item'
-    );
-    // dp__main 내부의 월/년 표시 텍스트를 찾음
-    const headers = Array.from(
-      document.querySelectorAll('[class*="_calendar-header_"]')
-    );
-    if (headers.length === 0) return "";
-    const spans = Array.from(headers[0].querySelectorAll("span"));
-    const found = spans.find((s) =>
-      /\d{4}[년\s]|\d{4}/.test(s.textContent ?? "")
-    );
-    return found?.textContent?.trim() ?? span?.textContent?.trim() ?? "";
-  });
+  // 문자열 스크립트 사용 — tsx/esbuild __name 헬퍼 주입 방지
+  // 실제 HTML: <div class="_calendar-header_1uc11_20"><span>2026년 1월</span></div>
+  const text = await page.evaluate(`
+    (function() {
+      var headers = document.querySelectorAll('[class*="_calendar-header_"]');
+      if (headers.length === 0) return '';
+      var spans = Array.from(headers[0].querySelectorAll('span'));
+      for (var i = 0; i < spans.length; i++) {
+        var t = (spans[i].textContent || '').trim();
+        if (/\\d{4}[년\\s]|\\d{4}/.test(t)) return t;
+      }
+      return (headers[0].textContent || '').trim();
+    })()
+  `) as string;
 
   const match = text.match(/(\d{4})[년.\s]+(\d{1,2})/) ??
     text.match(/(\d{1,2})[월.\s]+(\d{4})/);
@@ -77,12 +76,18 @@ async function readDpCalendarMonth(
  * tsx/esbuild의 __name 헬퍼 주입을 피하기 위해 문자열 형태의 evaluate 사용.
  * 동일 id가 2개(1월 overflow + 2월 패널)일 때는 마지막 요소를 클릭.
  */
-async function clickDpCell(page: Page, cellId: string): Promise<void> {
+/**
+ * dp__ 날짜 셀 클릭.
+ * useLast=true  → els[els.length-1]: 첫째 날 (이전 패널 overflow가 els[0]이므로 마지막이 실제 셀)
+ * useLast=false → els[0]           : 말일    (다음 패널 overflow가 els[마지막]이므로 첫 번째가 실제 셀)
+ */
+async function clickDpCell(page: Page, cellId: string, useLast = true): Promise<void> {
+  const elPicker = useLast ? 'els[els.length - 1]' : 'els[0]';
   await page.evaluate(`
     (function() {
       var els = document.querySelectorAll('[id="${cellId}"]');
       if (els.length === 0) throw new Error('dp__ cell not found: ${cellId}');
-      var el = els[els.length - 1];
+      var el = ${elPicker};
       el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
       el.dispatchEvent(new MouseEvent("mouseup",   { bubbles: true, cancelable: true }));
       el.dispatchEvent(new MouseEvent("click",     { bubbles: true, cancelable: true }));
@@ -179,22 +184,36 @@ export async function scrapeCoupangSalesAnalysis(
     // 이미 열려있을 수 있음 — 계속 진행
   }
 
-  // 달력 열릴 때까지 대기
-  // 실제 HTML: <div class="_calendar-header_1uc11_20"><span>2026년 1월</span></div>
-  // dp__ 달력이 두 달(이전달+이번달)을 표시하므로 startId 셀이 바로 보임
-  await page.waitForSelector(`[id="${startId}"]`, { timeout: 10_000 });
+  // 달력이 열릴 때까지 대기
+  // 이전 달 버튼([class*="_prev_"])이 나타나면 달력이 렌더링된 것으로 판단
+  // startId로 대기하면 과거 달은 아직 보이지 않아 타임아웃 발생
+  await page.waitForSelector('[class*="_prev_"]', { timeout: 10_000 });
 
   // 시작일 선택 (JS evaluate 클릭 — <html> 포인터 인터셉트 우회)
   await navigateDpCalendarToMonth(page, year, month);
   await clickDpCell(page, startId);
 
-  // 종료일 선택 (같은 달)
+  // 종료일 선택 (같은 달) — els[0]: 말일은 다음 패널 overflow에 중복 존재하므로 첫 번째가 실제 셀
   await navigateDpCalendarToMonth(page, year, month);
-  await clickDpCell(page, endId);
+  await clickDpCell(page, endId, false);
 
-  // 확인 버튼: 'MM.DD (요일) ~ MM.DD (요일)' 선택 완료
-  // 실제 HTML: <button data-wuic-props="name:btn type:primary size:l">...선택 완료</button>
-  await page.click('button[data-wuic-props*="type:primary"]:has-text("선택 완료")');
+  // 확인 버튼 (JS evaluate — viewport 외부 요소 대응)
+  await page.evaluate(`
+    (function() {
+      var btns = Array.from(document.querySelectorAll('button'));
+      var btn = null;
+      for (var i = 0; i < btns.length; i++) {
+        if ((btns[i].getAttribute('data-wuic-props') || '').indexOf('type:primary') !== -1 &&
+            (btns[i].textContent || '').trim().indexOf('선택 완료') !== -1) {
+          btn = btns[i];
+          break;
+        }
+      }
+      if (!btn) throw new Error('선택 완료 버튼 없음');
+      btn.scrollIntoView();
+      btn.click();
+    })()
+  `);
 
   // "판매량" 리프 노드가 컨테이너에 실제로 나타날 때까지 대기
   // (waitForSelector는 기존 컨테이너를 즉시 찾으므로 데이터 로드 미확인)

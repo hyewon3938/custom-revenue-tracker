@@ -19,12 +19,13 @@ const pad = (n: number) => String(n).padStart(2, "0");
 async function readCalendarMonth(
   page: Page
 ): Promise<{ year: number; month: number }> {
-  const text = await page.evaluate(() => {
-    const headers = document.querySelectorAll(
-      "div.custom-month-year-information"
-    );
-    return headers[0]?.textContent?.trim() ?? "";
-  });
+  // 문자열 스크립트 사용 — tsx/esbuild __name 헬퍼 주입 방지
+  const text = await page.evaluate(`
+    (function() {
+      var headers = document.querySelectorAll('div.custom-month-year-information');
+      return headers[0] ? (headers[0].textContent || '').trim() : '';
+    })()
+  `) as string;
 
   // "2026년 2월" 또는 "2026. 2" 형식
   const match = text.match(/(\d{4})[년.\s]+(\d{1,2})/);
@@ -43,17 +44,23 @@ async function navigateCalendarToMonth(
   targetYear: number,
   targetMonth: number
 ): Promise<void> {
+  // wing-web-component <i> 는 CSS 렌더링이라 getBoundingClientRect=0 → page.click() 실패
+  // JS evaluate + dispatchEvent 로 우회
   const MAX = 24;
   for (let i = 0; i < MAX; i++) {
     const { year, month } = await readCalendarMonth(page);
     if (year === targetYear && month === targetMonth) return;
 
     const diff = (targetYear - year) * 12 + (targetMonth - month);
-    if (diff > 0) {
-      await page.click('i[title="arrow-right"]');
-    } else {
-      await page.click('i[title="arrow-left"]');
-    }
+    const arrowTitle = diff > 0 ? "arrow-right" : "arrow-left";
+    await page.evaluate(`
+      (function() {
+        var el = document.querySelector('div.custom-month-year-controller i[title="${arrowTitle}"]');
+        if (!el) el = document.querySelector('i[title="${arrowTitle}"]');
+        if (!el) throw new Error('${arrowTitle} not found');
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      })()
+    `);
     await page.waitForTimeout(400);
   }
   throw new Error(
@@ -83,6 +90,8 @@ export async function scrapeCoupangSettlement(
   if (page.url().includes("/login")) {
     throw new Error("쿠팡 세션이 만료되었습니다. 다시 로그인 후 수집하세요.");
   }
+  // 페이지 JS 초기화 대기
+  await page.waitForTimeout(2_000);
 
   const endDay = calcEndDay(year, month);
   const startId = `${year}-${pad(month)}-01`;
@@ -90,16 +99,44 @@ export async function scrapeCoupangSettlement(
 
   // 날짜 범위 선택 버튼 클릭
   await page.click("button.custom-selection");
-  await page.waitForSelector(`[id="${startId}"]`, { timeout: 8_000 });
+  // 달력 오픈 확인: custom-month-year-controller 의 bounding rect 가 0보다 커질 때까지 대기
+  // waitForSelector(visible) 은 Playwright 내부 visibility 기준이라 실패할 수 있음
+  await page.waitForFunction(`
+    (function() {
+      var els = document.querySelectorAll('div.custom-month-year-controller');
+      for (var i = 0; i < els.length; i++) {
+        var r = els[i].getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return true;
+      }
+      return false;
+    })()
+  `, { timeout: 15_000 });
 
-  // 시작월로 이동 후 시작일 클릭
+  // 시작월로 이동 후 시작일 클릭 (JS evaluate — 포인터 인터셉트 우회)
   await navigateCalendarToMonth(page, year, month);
-  await page.click(`[id="${startId}"]`);
+  await page.evaluate(`
+    (function() {
+      var el = document.getElementById('${startId}');
+      if (!el) throw new Error('settlement cell not found: ${startId}');
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true }));
+    })()
+  `);
+  await page.waitForTimeout(400);
 
-  // 종료일: 같은 달이므로 캘린더 재이동 불필요
-  // (2-panel 캘린더에서 end date가 다른 패널에 있을 수 있으므로 재탐색)
+  // 종료일 선택 (같은 달)
   await navigateCalendarToMonth(page, year, month);
-  await page.click(`[id="${endId}"]`);
+  await page.evaluate(`
+    (function() {
+      var el = document.getElementById('${endId}');
+      if (!el) throw new Error('settlement cell not found: ${endId}');
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true }));
+    })()
+  `);
+  await page.waitForTimeout(400);
 
   // 완료 버튼 (networkidle 없이 — SPA라 idle이 오지 않을 수 있음)
   await page.click('button:has-text("완료")');
