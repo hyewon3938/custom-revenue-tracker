@@ -112,6 +112,13 @@ export async function scrapeNaverOrders(
 
   const frame = await getContentFrame(page);
 
+  // PeriodPicker React 컴포넌트가 완전히 렌더링될 때까지 대기
+  // (이전 페이지에서 넘어올 때 iframe 초기화 지연 방지)
+  await frame.waitForSelector('[data-testid*="Input::PeriodPicker::From"]', {
+    timeout: 20_000,
+  });
+  await frame.waitForTimeout(500);
+
   // 주문통합검색 날짜 인풋은 readonly → 캘린더 클릭 방식으로 설정
   await setDateRangeWithCalendar(
     frame, year, month,
@@ -119,7 +126,19 @@ export async function scrapeNaverOrders(
     "Input::PeriodPicker::To"
   );
 
-  // 결과 테이블 로드 대기
+  // 검색 결과 반영 대기:
+  // 기본 뷰가 이미 테이블에 있으므로 waitForSelector 만으로는 불충분.
+  // _listTotalCount가 갱신될 때까지 대기해야 검색 결과가 실제로 로드됨.
+  await frame.waitForFunction(
+    () => {
+      const el = document.querySelector("b._listTotalCount, .point_color._listTotalCount");
+      const n = parseInt(el?.textContent?.trim() ?? "0", 10);
+      return n > 0;
+    },
+    { timeout: 15_000 }
+  );
+
+  // 결과 테이블 로드 대기 (추가 안전장치)
   await frame.waitForSelector("table.tui-grid-table", { timeout: 15_000 });
 
   const productMap = new Map<string, ProductSales>();
