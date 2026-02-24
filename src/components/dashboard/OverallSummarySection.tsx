@@ -1,7 +1,5 @@
 import { OverallSummary } from "@/lib/types";
-
-const krw = (n: number) =>
-  n.toLocaleString("ko-KR", { style: "currency", currency: "KRW" });
+import { formatKRW as krw } from "@/lib/utils/format";
 
 function StatCard({
   label,

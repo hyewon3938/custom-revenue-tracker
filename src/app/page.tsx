@@ -90,38 +90,46 @@ export default function DashboardPage() {
   // 수기 편집 (PATCH)
   const handleUpdate = useCallback(
     async (patch: object) => {
-      const res = await fetch("/api/report", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          year: selectedYear,
-          month: selectedMonth,
-          ...patch,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "저장 실패");
+      try {
+        const res = await fetch("/api/report", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            year: selectedYear,
+            month: selectedMonth,
+            ...patch,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error ?? "저장 실패");
+        }
+        const updated: MonthlyReport = await res.json();
+        setReport(updated);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.");
       }
-      const updated: MonthlyReport = await res.json();
-      setReport(updated);
     },
     [selectedYear, selectedMonth]
   );
 
   // AI 인사이트 재생성
   const handleRegenerate = async () => {
-    const res = await fetch("/api/insights", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ year: selectedYear, month: selectedMonth }),
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error ?? "인사이트 생성 실패");
+    try {
+      const res = await fetch("/api/insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year: selectedYear, month: selectedMonth }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "인사이트 생성 실패");
+      }
+      const { insights } = await res.json();
+      setReport((prev) => (prev ? { ...prev, insights } : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "인사이트 생성 중 오류가 발생했습니다.");
     }
-    const { insights } = await res.json();
-    setReport((prev) => (prev ? { ...prev, insights } : prev));
   };
 
   const hasSaved = savedList.some(

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MonthlyReport, SalesInsight } from "@/lib/types";
+import { formatKRW } from "@/lib/utils/format";
 
 // 모듈 로드 시 초기화하지 않음 (API 키 없으면 생성자 자체가 throw)
 function getClient(): Anthropic {
@@ -10,9 +11,6 @@ function getClient(): Anthropic {
   }
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
-
-const formatKRW = (n: number) =>
-  n.toLocaleString("ko-KR", { style: "currency", currency: "KRW" });
 
 function buildPrompt(report: Omit<MonthlyReport, "insights">): string {
   const { period, naver, coupang, offline, summary, overallRanking } = report;

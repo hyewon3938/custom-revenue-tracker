@@ -1,10 +1,8 @@
 "use client";
 
 import { NaverData, CoupangData, OfflineData } from "@/lib/types";
+import { formatKRW as krw } from "@/lib/utils/format";
 import EditableField from "./EditableField";
-
-const krw = (n: number) =>
-  n.toLocaleString("ko-KR", { style: "currency", currency: "KRW" });
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

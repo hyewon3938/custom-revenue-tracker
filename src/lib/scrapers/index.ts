@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, Browser, BrowserContext, Page } from "playwright";
 import {
   MonthlyReport,
   NaverData,
@@ -36,6 +36,24 @@ const EMPTY_SHIPPING_STATS: ShippingStats = {
   sellerCost: 0,
 };
 
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+/** 공통 브라우저 + 컨텍스트 + 페이지 생성 */
+async function createBrowserPage(): Promise<{
+  browser: Browser;
+  context: BrowserContext;
+  page: Page;
+}> {
+  const browser = await chromium.launch({
+    headless: false,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+  const context = await browser.newContext({ userAgent: BROWSER_UA });
+  const page = await context.newPage();
+  return { browser, context, page };
+}
+
 /**
  * 조회 기간 결정:
  * - 이번 달이면 1일 ~ 어제
@@ -64,15 +82,7 @@ async function collectNaverData(
   year: number,
   month: number
 ): Promise<NaverData> {
-  const browser = await chromium.launch({
-    headless: false,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  });
-  const page = await context.newPage();
+  const { browser, context, page } = await createBrowserPage();
 
   try {
     await loginNaver(page);
@@ -122,15 +132,7 @@ async function collectCoupangData(
   year: number,
   month: number
 ): Promise<CoupangData> {
-  const browser = await chromium.launch({
-    headless: false,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  });
-  const page = await context.newPage();
+  const { browser, context, page } = await createBrowserPage();
 
   try {
     await loginCoupang(page);

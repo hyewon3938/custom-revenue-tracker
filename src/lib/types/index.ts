@@ -27,7 +27,7 @@ export interface PlatformFees {
 // ─── 플랫폼별 이익 계산 결과 ──────────────────────────────────────────────
 export interface PlatformProfit {
   profit: number; // 이익 = 매출 - 수수료 - 물류비 - 광고비
-  materialCost: number; // 부자재비 (온라인: (매출-물류비)×15% / 오프라인: 매출×20%)
+  materialCost: number; // 부자재비 (환경변수 비율 적용)
   netProfit: number; // 순이익 = 이익 - 부자재비
 }
 
