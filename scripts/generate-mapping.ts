@@ -136,8 +136,9 @@ async function main() {
     // 파일 없으면 무시
   }
 
+  // 기존 파일이 있으면 confirmedByUser 여부와 관계없이 canonical 항상 보존
   const existingMap = new Map<string, string>(); // naver+coupang key → canonical
-  if (existingConfig?.confirmedByUser) {
+  if (existingConfig) {
     for (const m of existingConfig.mappings) {
       const key = `${m.naver ?? ""}||${m.coupang ?? ""}`;
       existingMap.set(key, m.canonical);

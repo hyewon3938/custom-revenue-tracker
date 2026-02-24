@@ -23,7 +23,7 @@ import {
   calcOverallRanking,
   calcProductMatrix,
 } from "@/lib/calculations/profit";
-import { loadProductMapping } from "@/lib/storage/mapping-store";
+import { loadProductMapping, syncNewProductsToMapping } from "@/lib/storage/mapping-store";
 
 const EMPTY_FEES: PlatformFees = {
   settlementAmount: 0,
@@ -217,6 +217,20 @@ export async function collectMonthlyData(
     profit: calcOfflineProfit(0, offlineFees),
     products: [],
   };
+
+  // 새 상품이 있으면 매핑 파일에 자동 추가
+  const addedCount = await syncNewProductsToMapping(
+    naverData.products,
+    coupangData.products
+  );
+  if (addedCount > 0) {
+    console.log(
+      `[매핑] 신규 상품 ${addedCount}개를 product-mapping.json에 추가했습니다.`
+    );
+    console.log(
+      `  → data/product-mapping.json을 열어 canonical 이름을 확인해주세요.`
+    );
+  }
 
   const mapping = await loadProductMapping();
 
