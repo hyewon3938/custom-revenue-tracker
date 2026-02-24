@@ -1,151 +1,197 @@
 /**
- * 쿠팡 판매분석 날짜 선택 & 데이터 추출 디버그
+ * 쿠팡 판매분석 - 상품별 데이터 구조 정밀 탐색
+ * STRONG(상품명) 기반으로 수량 필드 위치를 찾아냄
+ *
  * 실행: npx tsx scripts/debug-coupang-sales.ts
  */
 import { chromium } from "playwright";
-import { loginCoupang, COUPANG_URLS } from "../src/lib/scrapers/coupang-auth";
+import { loginCoupang, COUPANG_URLS, pad } from "../src/lib/scrapers/coupang-auth";
+import { getValidSessionPath } from "../src/lib/scrapers/session-store";
 import { calcEndDay } from "../src/lib/scrapers/naver-datepicker";
 
 const YEAR = 2026, MONTH = 2;
-const pad = (n: number) => String(n).padStart(2, "0");
+const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 (async () => {
+  const sessionPath = await getValidSessionPath("coupang");
   const browser = await chromium.launch({ headless: false });
   const ctx = await browser.newContext({
-    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    userAgent: UA,
+    ...(sessionPath ? { storageState: sessionPath } : {}),
   });
   const page = await ctx.newPage();
 
   try {
-    await loginCoupang(page);
-    console.log("✅ 로그인 완료\n");
+    await loginCoupang(page, ctx);
+    console.log("✅ 로그인 완료");
 
     await page.goto(COUPANG_URLS.salesAnalysis);
     await page.waitForLoadState("load");
+    await page.waitForTimeout(2_000);
 
     // 팝업 닫기
     for (const sel of [
       'button[data-wuic-props="name:btn size:m"]:has-text("닫기")',
       'button[data-wuic-props="name:btn size:l"]:has-text("닫기")',
     ]) {
-      try { await page.click(sel, { timeout: 1_500 }); await page.waitForTimeout(300); } catch {}
+      await page.click(sel, { timeout: 1_500 }).catch(() => {});
     }
 
     const endDay = calcEndDay(YEAR, MONTH);
     const startId = `dp-${YEAR}-${pad(MONTH)}-01`;
     const endId   = `dp-${YEAR}-${pad(MONTH)}-${pad(endDay)}`;
-    console.log(`날짜: ${startId} ~ ${endId}`);
 
-    // 트리거 클릭
+    // 날짜 선택
     await page.click('div.context-trigger-filter:has-text("최근 7일")', { timeout: 5_000 });
-    await page.waitForSelector(`[id="${startId}"]`, { timeout: 10_000 });
+    await page.waitForSelector('[class*="_prev_"]', { timeout: 10_000 });
 
-    // 시작일 클릭
+    for (let i = 0; i < 12; i++) {
+      const found = await page.$(`[id="${startId}"]`);
+      if (found) break;
+      await page.click('[class*="_prev_"]').catch(() => {});
+      await page.waitForTimeout(400);
+    }
+
     await page.evaluate(`
       (function() {
-        var els = document.querySelectorAll('[id="${startId}"]');
-        var el = els[els.length - 1];
-        el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        el.dispatchEvent(new MouseEvent("mouseup",   { bubbles: true }));
-        el.dispatchEvent(new MouseEvent("click",     { bubbles: true }));
+        var start = document.querySelectorAll('[id="${startId}"]');
+        var el = start[start.length - 1];
+        ['mousedown','mouseup','click'].forEach(function(t) { el.dispatchEvent(new MouseEvent(t, {bubbles:true})); });
       })()
     `);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600);
 
-    // 종료일 클릭
     await page.evaluate(`
       (function() {
-        var els = document.querySelectorAll('[id="${endId}"]');
-        var el = els[els.length - 1];
-        el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        el.dispatchEvent(new MouseEvent("mouseup",   { bubbles: true }));
-        el.dispatchEvent(new MouseEvent("click",     { bubbles: true }));
+        var end = document.querySelectorAll('[id="${endId}"]');
+        var el = end[0];
+        ['mousedown','mouseup','click'].forEach(function(t) { el.dispatchEvent(new MouseEvent(t, {bubbles:true})); });
       })()
     `);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600);
 
-    // 확인 버튼 클릭
-    await page.click('button[data-wuic-props*="type:primary"]:has-text("선택 완료")');
-    console.log("확인 버튼 클릭 완료");
+    await page.evaluate(`
+      (function() {
+        var btns = Array.from(document.querySelectorAll('button'));
+        var btn = btns.find(function(b) {
+          return (b.getAttribute('data-wuic-props')||'').includes('type:primary') &&
+                 (b.textContent||'').includes('선택 완료');
+        });
+        if (btn) { btn.scrollIntoView(); btn.click(); }
+      })()
+    `);
+    console.log("날짜 선택 완료. 5초 대기...");
+    await page.waitForTimeout(5_000);
 
-    // 3초 대기 (데이터 로드)
-    await page.waitForTimeout(3_000);
-
-    // ── 데이터 추출 로직 테스트 ──
+    // ── 핵심: STRONG 기반 상품 행 구조 탐색 ─────────────────────────
     const result = await page.evaluate(`
       (function() {
-        function parseNum(text) {
-          if (!text) return 0;
-          return parseInt(text.replace(/,/g, '')) || 0;
-        }
+        var container = document.querySelector('[class*="_with-product_"]');
+        if (!container) return { error: '_with-product_ 없음' };
 
-        var container = document.querySelector(
-          '[class*="_container_1pewv_1"][class*="_with-product_"]'
-        );
-        if (!container) return { error: 'container not found', totalRevenue: 0, products: [] };
-
-        var allEls = Array.from(container.querySelectorAll('*')).filter(function(el) {
-          return el.children.length === 0 && (el.textContent || '').trim();
+        // 상품명 STRONG: 한글 5자 이상
+        var strongs = Array.from(container.querySelectorAll('strong')).filter(function(el) {
+          var txt = (el.textContent || '').trim();
+          return /[가-힣]/.test(txt) && txt.replace(/\\s/g,'').length >= 5;
         });
 
-        console.log('[debug] 리프 요소 수:', allEls.length);
+        var samples = strongs.slice(0, 6).map(function(strong) {
+          var productName = (strong.textContent || '').trim().slice(0, 50);
+          var ancestor = strong;
 
-        // "판매량" 찾기
-        var salesLabelIndices = [];
-        for (var i = 0; i < allEls.length; i++) {
-          var t = (allEls[i].textContent || '').trim();
-          if (t === '판매량') salesLabelIndices.push(i);
-        }
-        console.log('[debug] "판매량" 리프 인덱스:', salesLabelIndices);
+          // STRONG에서 위로 올라가며 수량 숫자를 찾는다
+          for (var depth = 0; depth < 20; depth++) {
+            ancestor = ancestor.parentElement;
+            if (!ancestor) break;
 
-        // 샘플: 첫 번째 "판매량" 주변 요소 출력
-        if (salesLabelIndices.length > 0) {
-          var idx = salesLabelIndices[0];
-          var sample = [];
-          for (var k = Math.max(0, idx - 5); k <= Math.min(allEls.length - 1, idx + 5); k++) {
-            sample.push({ i: k, text: (allEls[k].textContent || '').trim().slice(0, 30), cls: (allEls[k].getAttribute('class') || '').slice(0, 40) });
-          }
-          console.log('[debug] 판매량 주변 요소:', JSON.stringify(sample));
-        }
+            // 이 subtree의 모든 리프 노드
+            var leaves = Array.from(ancestor.querySelectorAll('*')).filter(function(el) {
+              return el.children.length === 0 && (el.textContent || '').trim();
+            });
 
-        var products = [];
-        var totalRevenue = 0;
+            // 숫자(수량 후보): 쉼표 포함 1~6자리 정수, 양수
+            var nums = leaves.filter(function(el) {
+              var txt = (el.textContent || '').trim();
+              return /^[\\d,]{1,7}$/.test(txt) && parseInt(txt.replace(/,/g,'')) > 0;
+            }).map(function(el) {
+              return {
+                val: el.textContent.trim(),
+                tag: el.tagName,
+                cls: (el.getAttribute('class') || 'n/a').slice(0, 60),
+              };
+            });
 
-        for (var i = 0; i < allEls.length; i++) {
-          if ((allEls[i].textContent || '').trim() !== '판매량') continue;
+            // 레이블: "판매량", "개" 등
+            var labels = leaves
+              .map(function(el) { return (el.textContent||'').trim(); })
+              .filter(function(t) { return t === '판매량' || t === '개' || t.includes('개'); });
 
-          var quantity = parseNum(allEls[i - 1] ? allEls[i - 1].textContent : null);
-          var revenue  = parseNum(allEls[i + 2] ? allEls[i + 2].textContent : null);
-          totalRevenue += revenue;
-
-          var productName = '';
-          for (var j = i - 2; j >= Math.max(0, i - 30); j--) {
-            var el  = allEls[j];
-            var cls = el.getAttribute('class');
-            var txt = (el.textContent || '').trim();
-            if ((cls === null || cls === '') && /[가-힣]/.test(txt) && txt.length > 1) {
-              productName = txt;
-              break;
+            if (nums.length >= 1 && (labels.length >= 1 || depth <= 5)) {
+              return {
+                name: productName,
+                depth: depth,
+                ancestorCls: (ancestor.getAttribute('class') || 'n/a').slice(0, 100),
+                nums: nums.slice(0, 5),
+                labels: labels.slice(0, 5),
+              };
             }
           }
+          return { name: productName, error: '수량 필드 미발견' };
+        });
 
-          if (productName && quantity > 0) {
-            products.push({ productName: productName, quantity: quantity, revenue: revenue });
-          }
-        }
+        // _with-product_ 직계 자식들 클래스 목록
+        var directChildren = Array.from(container.children).map(function(el) {
+          return {
+            tag: el.tagName,
+            cls: (el.getAttribute('class') || '').slice(0, 100),
+            textPreview: (el.textContent || '').trim().slice(0, 60),
+          };
+        });
 
-        return { totalRevenue: totalRevenue, products: products };
+        return { strongCount: strongs.length, samples: samples, directChildren: directChildren };
       })()
-    `);
+    `) as {
+      strongCount?: number;
+      error?: string;
+      samples?: { name: string; depth?: number; ancestorCls?: string; nums?: { val: string; tag: string; cls: string }[]; labels?: string[]; error?: string }[];
+      directChildren?: { tag: string; cls: string; textPreview: string }[];
+    };
 
-    console.log("\n추출 결과:");
-    console.log(JSON.stringify(result, null, 2));
+    if (result.error) {
+      console.error("❌", result.error);
+    } else {
+      console.log(`\n한글 STRONG(상품명 후보) ${result.strongCount}개\n`);
 
-    console.log("\n10초 후 종료...");
-    await page.waitForTimeout(10_000);
+      console.log("── _with-product_ 직계 자식 섹션들 ───────────────────────");
+      (result.directChildren || []).forEach((c, i) =>
+        console.log(`  [${i}] <${c.tag}> cls="${c.cls}" | "${c.textPreview}"`)
+      );
+
+      console.log("\n── 상품명 STRONG → 수량 필드 탐색 결과 ──────────────────");
+      (result.samples || []).forEach((s, i) => {
+        if (s.error) {
+          console.log(`\n[${i}] ${s.name}\n  ❌ ${s.error}`);
+        } else {
+          console.log(`\n[${i}] ${s.name}`);
+          console.log(`  depth=${s.depth} | cls: ${s.ancestorCls}`);
+          console.log(`  숫자 후보:`, (s.nums || []).map(n => `${n.val}(${n.tag})`).join(", "));
+          console.log(`  레이블:`, (s.labels || []).join(", ") || "(없음)");
+        }
+      });
+    }
+
+    await page.screenshot({ path: "debug-coupang-sales.png" });
+    console.log("\n스크린샷: debug-coupang-sales.png");
+    console.log("\nEnter 키로 종료...");
+    await new Promise<void>(resolve => {
+      process.stdin.resume();
+      process.stdin.once("data", () => { process.stdin.pause(); resolve(); });
+    });
+
   } catch (e) {
     console.error("❌ 에러:", e);
-    await page.waitForTimeout(10_000);
+    await page.screenshot({ path: "debug-coupang-error.png" }).catch(() => {});
+    await page.waitForTimeout(15_000);
   } finally {
     await browser.close();
   }

@@ -204,25 +204,43 @@ export async function scrapeCoupangSalesAnalysis(
     })()
   `);
 
-  // "판매량" 리프 노드가 컨테이너에 실제로 나타날 때까지 대기
-  // (waitForSelector는 기존 컨테이너를 즉시 찾으므로 데이터 로드 미확인)
-  // 상품명 구조: <strong>(class=null, leaf) "제품명"
-  // 판매량 구조: _label_1agud_ > span "판매량 " → leaf node
+  // 상품 리스트의 판매량 레이블(_label_1agud_)이 나타날 때까지 대기.
+  // _label_1agud_ 조건을 추가해 차트 섹션 "판매량" 토글 버튼 오탐 방지.
+  //
+  // 확정 리프 노드 순서 (상품 1행 기준):
+  //   STRONG "상품명"
+  //   A      "등록상품 ID ∙ 옵션 ID"
+  //   SPAN   "책갈피/북마크" (카테고리)
+  //   SPAN   "상품 상태" / "광고 중지" / "외 N개" (선택)
+  //   SPAN   숫자("방문자") SPAN "방문자" SPAN %
+  //   SPAN   숫자("조회")   SPAN "조회"   SPAN %
+  //   SPAN   숫자("장바구니") SPAN "장바구니" SPAN %
+  //   SPAN   숫자("주문")   SPAN "주문"   SPAN %
+  //   SPAN   [수량]          ← allEls[i-1]  parentCls: _value_1agud_
+  //   SPAN   "판매량"        ← allEls[i]    parentCls: _label_1agud_  ← 여기로 판별
+  //   SPAN   %              ← allEls[i+1]
+  //   SPAN   [매출]          ← allEls[i+2]  parentCls: _value_1agud_
+  //   SPAN   "매출 (원)"
+  //   ...
+  //   SPAN   "로켓그로스"
   await page.waitForFunction(
     `(function() {
       var container = document.querySelector('[class*="_container_1pewv_1"][class*="_with-product_"]');
       if (!container) return false;
       var els = container.querySelectorAll('*');
       for (var i = 0; i < els.length; i++) {
-        if (els[i].children.length === 0 && (els[i].textContent || '').trim() === '판매량') return true;
+        var el = els[i];
+        if (el.children.length === 0 && (el.textContent || '').trim() === '판매량') {
+          var parentCls = (el.parentElement ? el.parentElement.getAttribute('class') || '' : '');
+          if (parentCls.includes('_label_1agud_')) return true;
+        }
       }
       return false;
     })()`,
     { timeout: 30_000 }
   );
 
-  // 제품 데이터 + 총 매출 추출
-  // 문자열 스크립트 사용 — tsx/esbuild __name 헬퍼 주입 방지
+  // 제품 데이터 + 총 매출 추출 (문자열 스크립트 — tsx/esbuild __name 헬퍼 주입 방지)
   const data = await page.evaluate(`
     (function() {
       function parseNum(text) {
@@ -243,22 +261,26 @@ export async function scrapeCoupangSalesAnalysis(
       var totalRevenue = 0;
 
       for (var i = 0; i < allEls.length; i++) {
-        if ((allEls[i].textContent || '').trim() !== '판매량') continue;
+        var el = allEls[i];
+        if ((el.textContent || '').trim() !== '판매량') continue;
 
+        // 차트 섹션 오탐 방지: 상품 리스트 판매량 레이블(_label_1agud_)만 처리
+        var parentCls = (el.parentElement ? el.parentElement.getAttribute('class') || '' : '');
+        if (!parentCls.includes('_label_1agud_')) continue;
+
+        // i-1: 판매량 수치, i+1: 전기 대비 %, i+2: 매출 수치
         var quantity = parseNum(allEls[i - 1] ? allEls[i - 1].textContent : null);
         var revenue  = parseNum(allEls[i + 2] ? allEls[i + 2].textContent : null);
         totalRevenue += revenue;
 
-        // 상품명: <strong> 태그를 역방향 탐색
-        // 실제 구조: <p class="_common_ghzur_1 _ellipsis_dlsk5_12">
-        //              <span class="" href=""><span><strong>상품명</strong>, 1개</span></span>
-        //            </p>
-        // "카테고리: 책갈피/북마크"보다 더 앞에 있으므로 STRONG 태그로 특정
+        // 상품명: 현재 위치에서 역방향으로 STRONG(한글) 탐색
+        // 개별 상품 행은 STRONG → 각종 메트릭 → 판매량 순서이므로
+        // 최대 60 리프 노드 이내에 반드시 해당 상품의 STRONG이 존재
         var productName = '';
         for (var j = i - 2; j >= Math.max(0, i - 60); j--) {
-          var el  = allEls[j];
-          var txt = (el.textContent || '').trim();
-          if (el.tagName === 'STRONG' && /[가-힣]/.test(txt)) {
+          var sEl = allEls[j];
+          var txt = (sEl.textContent || '').trim();
+          if (sEl.tagName === 'STRONG' && /[가-힣]/.test(txt)) {
             productName = txt;
             break;
           }
