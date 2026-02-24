@@ -14,6 +14,7 @@ import {
   calcOverallRanking,
   calcProductMatrix,
 } from "@/lib/calculations/profit";
+import { loadProductMapping } from "@/lib/storage/mapping-store";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
 
@@ -98,6 +99,8 @@ export async function updateReport(
     profit: calcOfflineProfit(offline.revenue, offline.fees),
   };
 
+  const mapping = await loadProductMapping();
+
   const summary = calcOverallSummary(
     naverWithProfit,
     coupangWithProfit,
@@ -110,14 +113,14 @@ export async function updateReport(
     naverWithProfit.products,
     coupangWithProfit.products,
     offlineWithProfit.products,
-    null,
+    mapping,
     5
   );
   const productMatrix = calcProductMatrix(
     naverWithProfit.products,
     coupangWithProfit.products,
     offlineWithProfit.products,
-    null
+    mapping
   );
 
   const updated: MonthlyReport = {

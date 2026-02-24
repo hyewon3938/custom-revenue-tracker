@@ -23,6 +23,7 @@ import {
   calcOverallRanking,
   calcProductMatrix,
 } from "@/lib/calculations/profit";
+import { loadProductMapping } from "@/lib/storage/mapping-store";
 
 const EMPTY_FEES: PlatformFees = {
   settlementAmount: 0,
@@ -217,6 +218,8 @@ export async function collectMonthlyData(
     products: [],
   };
 
+  const mapping = await loadProductMapping();
+
   const summary = calcOverallSummary(naverData, coupangData, offline);
   const naverRanking = calcPlatformRanking(naverData.products, 3);
   const coupangRanking = calcPlatformRanking(coupangData.products, 3);
@@ -225,14 +228,14 @@ export async function collectMonthlyData(
     naverData.products,
     coupangData.products,
     offline.products,
-    null, // 매핑 없이 초기 수집
+    mapping,
     5
   );
   const productMatrix = calcProductMatrix(
     naverData.products,
     coupangData.products,
     offline.products,
-    null
+    mapping
   );
 
   const now = new Date().toISOString();
