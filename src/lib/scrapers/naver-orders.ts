@@ -2,6 +2,7 @@ import { Page, Frame } from "playwright";
 import { ProductSales, ProductCategory } from "@/lib/types";
 import { NAVER_URLS, getContentFrame } from "./naver-auth";
 import { setDateRangeWithCalendar } from "./naver-datepicker";
+import { goToNextPageInGrid } from "./naver-utils";
 
 /** 상품명으로 카테고리 자동 판별 (끈갈피 = handmade) */
 export function detectCategory(productName: string): ProductCategory {
@@ -52,45 +53,6 @@ async function extractOrderRows(
     }
 
     return results;
-  });
-}
-
-/**
- * 다음 페이지 버튼 클릭. 더 이상 없으면 false 반환.
- * 주문통합검색 페이지네이션: naver-settlement와 동일한 div.npay_grid_area 구조.
- */
-async function goToNextPage(frame: Frame): Promise<boolean> {
-  return frame.evaluate(() => {
-    const gridArea = document.querySelector("div.npay_grid_area");
-    if (!gridArea) return false;
-
-    const gridDiv = gridArea.querySelector("div.grid");
-    if (!gridDiv) return false;
-
-    // div.grid 다음 형제 중 첫 번째 DIV가 페이지네이션 컨테이너
-    let paginationContainer: Element | null = null;
-    let sibling = gridDiv.nextElementSibling;
-    while (sibling) {
-      if (sibling.tagName === "DIV") { paginationContainer = sibling; break; }
-      sibling = sibling.nextElementSibling;
-    }
-    if (!paginationContainer) return false;
-
-    // 컨테이너 안 직접 자식 중 현재 페이지(<strong>) 찾기
-    const children = Array.from(paginationContainer.children);
-    const searchScope = children.length > 0 ? children : [paginationContainer];
-
-    const currentIdx = searchScope.findIndex(
-      (el) => el.querySelector("strong") || el.tagName === "STRONG"
-    );
-    if (currentIdx === -1) return false;
-
-    const nextBtn = searchScope[currentIdx + 1];
-    if (!nextBtn || !/^\d+$/.test(nextBtn.textContent?.trim() ?? ""))
-      return false;
-
-    (nextBtn as HTMLElement).click();
-    return true;
   });
 }
 
@@ -164,7 +126,7 @@ export async function scrapeNaverOrders(
       productMap.get(productName)!.quantity += quantity;
     }
 
-    const hasNext = await goToNextPage(frame);
+    const hasNext = await goToNextPageInGrid(frame);
     if (!hasNext) break;
     pageIndex++;
   }

@@ -185,9 +185,7 @@ export async function setDateRangeWithCalendar(
   const endInput = frame.locator(`[data-testid*="${testidTo}"]`);
 
   // testid ("Input::PeriodPicker::From") → prev/next 셀렉터 파생
-  // 시작일 캘린더: "PeriodPicker::From" 기반
-  // 종료일 캘린더: "PeriodPicker::To" 기반 (별도 버튼)
-  const mkNavSels = (testid: string) => {
+  const makeNavSels = (testid: string) => {
     const part = testid.replace("Input::", "");
     return {
       prev: `[data-testid*="PrevMonth::${part}"]`,
@@ -223,27 +221,16 @@ export async function setDateRangeWithCalendar(
   };
 
   // 시작일: 1일 (From 캘린더 버튼 사용)
-  await openAndPick(startInput, 1, mkNavSels(testidFrom));
+  await openAndPick(startInput, 1, makeNavSels(testidFrom));
 
   // 종료일: 말일/어제 (To 캘린더 버튼 사용)
-  await openAndPick(endInput, endDay, mkNavSels(testidTo));
+  await openAndPick(endInput, endDay, makeNavSels(testidTo));
 
   // 검색
   await frame.click('button.size_large.type_green:has-text("검색")');
   await frame.waitForLoadState("networkidle");
 }
 
-/**
- * 시작일(1일) ~ 종료일(말일) 선택 후 검색 버튼 클릭
- *
- * @param page    Playwright Page
- * @param year    조회 연도
- * @param month   조회 월 (1~12)
- */
-/**
- * calendar_lypop 달력에서 특정 연월로 이동.
- * 헤더 텍스트 "YYYY년 MM월" 형식 기준으로 이전/다음 버튼 클릭.
- */
 /**
  * calendar_lypop (DayPicker 라이브러리) 달력에서 특정 연월로 이동.
  * 헤더: div.DayPicker-Caption "YYYY. MM."

@@ -12,57 +12,51 @@ export const NAVER_URLS = {
   settlement: `${NAVER_BASE}/#/naverpay/settlemgt/sellerdailysettle`,
 } as const;
 
-/**
- * 스마트스토어 SPA 구조:
- *   - 외부 껍데기: https://sell.smartstore.naver.com/#/...  (hash routing)
- *   - 실제 콘텐츠: https://sell.smartstore.naver.com/o/v3/... (iframe)
- *
- * page.goto()로 hash URL로 이동한 뒤, 이 함수로 실제 콘텐츠 frame을 얻어야 함.
- * - 이미 로드된 경우 즉시 반환
- * - 아직 로드 중이면 폴링으로 대기
- *
- * 주문/정산 iframe: /o/v3/ 또는 /o/v2/
- * 정산내역 iframe: /e/v3/settlemgt/  (별도 패턴 — 아래 getFrameByUrl 사용)
- */
-export async function getContentFrame(page: Page, timeout = 20_000): Promise<Frame> {
-  const isContent = (url: string) =>
-    url.includes("/o/v3/") || url.includes("/o/v2/");
-
+/** URL 조건을 만족하는 iframe을 폴링으로 찾는 내부 헬퍼 */
+async function pollForFrame(
+  page: Page,
+  predicate: (url: string) => boolean,
+  timeout: number,
+  errorMsg: string
+): Promise<Frame> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const frame = page.frames().find((f) => isContent(f.url()));
+    const frame = page.frames().find((f) => predicate(f.url()));
     if (frame) return frame;
     await new Promise((r) => setTimeout(r, 500));
   }
-
   const urls = page.frames().map((f) => f.url());
-  throw new Error(
-    `콘텐츠 iframe을 찾을 수 없습니다.\n현재 frames: ${JSON.stringify(urls)}`
+  throw new Error(`${errorMsg}\n현재 frames: ${JSON.stringify(urls)}`);
+}
+
+/**
+ * 주문/정산 콘텐츠 iframe 반환.
+ * 스마트스토어 SPA는 hash URL로 라우팅하고 실제 콘텐츠는 /o/v3/ (또는 /o/v2/) iframe에 있음.
+ */
+export async function getContentFrame(page: Page, timeout = 20_000): Promise<Frame> {
+  return pollForFrame(
+    page,
+    (url) => url.includes("/o/v3/") || url.includes("/o/v2/"),
+    timeout,
+    "콘텐츠 iframe을 찾을 수 없습니다."
   );
 }
 
 /**
- * URL에 특정 문자열이 포함된 iframe을 찾아 반환.
- *
- * 용도:
- *   - 네이버 정산내역: getFrameByUrl(page, "/e/v3/settlemgt/")
- *   - 네이버 판매분석: getFrameByUrl(page, "/biz_iframe/")
+ * URL에 특정 문자열이 포함된 iframe 반환.
+ * - 네이버 정산내역: getFrameByUrl(page, "/e/v3/settlemgt/")
+ * - 네이버 판매분석: getFrameByUrl(page, "/biz_iframe/")
  */
 export async function getFrameByUrl(
   page: Page,
   urlContains: string,
   timeout = 20_000
 ): Promise<Frame> {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const frame = page.frames().find((f) => f.url().includes(urlContains));
-    if (frame) return frame;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-
-  const urls = page.frames().map((f) => f.url());
-  throw new Error(
-    `iframe을 찾을 수 없습니다 (패턴: "${urlContains}").\n현재 frames: ${JSON.stringify(urls)}`
+  return pollForFrame(
+    page,
+    (url) => url.includes(urlContains),
+    timeout,
+    `iframe을 찾을 수 없습니다 (패턴: "${urlContains}").`
   );
 }
 

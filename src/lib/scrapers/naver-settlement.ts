@@ -1,6 +1,7 @@
 import { Page, Frame } from "playwright";
 import { NAVER_URLS, getFrameByUrl } from "./naver-auth";
 import { setDateRangeWithCalendar } from "./naver-datepicker";
+import { goToNextPageInGrid } from "./naver-utils";
 
 export interface NaverSettlementResult {
   settlementAmount: number; // 정산금액 합계
@@ -39,44 +40,51 @@ async function extractSettlementRows(
 }
 
 /**
- * 커스텀 페이지네이션에서 다음 페이지로 이동.
- * 구조: div.npay_grid_area > div.grid (테이블) 다음 형제들이 페이지 버튼.
- *   현재 페이지: <strong>N</strong> 포함, 다음 페이지: 텍스트가 숫자인 다음 형제.
+ * 검색 결과가 조회 월 데이터로 갱신될 때까지 대기.
+ * 첫 번째 데이터 행의 날짜 텍스트가 year.month 접두사와 일치하는지 확인.
+ * 데이터가 없는 달은 행이 0개 → 로드 완료로 간주.
  */
-async function goToNextPage(frame: Frame): Promise<boolean> {
-  return frame.evaluate(() => {
-    const gridArea = document.querySelector("div.npay_grid_area");
-    if (!gridArea) return false;
-
-    const gridDiv = gridArea.querySelector("div.grid");
-    if (!gridDiv) return false;
-
-    // div.grid 다음 형제 중 첫 번째 DIV가 페이지네이션 컨테이너
-    // (페이지가 여러 개일 때 "1 2 끝페이지" 등이 하나의 DIV 안에 묶임)
-    let paginationContainer: Element | null = null;
-    let sibling = gridDiv.nextElementSibling;
-    while (sibling) {
-      if (sibling.tagName === "DIV") { paginationContainer = sibling; break; }
-      sibling = sibling.nextElementSibling;
-    }
-    if (!paginationContainer) return false;
-
-    // 컨테이너 안 직접 자식 중 현재 페이지(<strong>) 찾기
-    const children = Array.from(paginationContainer.children);
-
-    // 자식이 없으면(단일 페이지 버튼이 컨테이너 자체인 경우) 컨테이너를 직접 탐색
-    const searchScope = children.length > 0 ? children : [paginationContainer];
-
-    const currentIdx = searchScope.findIndex((el) => el.querySelector("strong") || el.tagName === "STRONG");
-    if (currentIdx === -1) return false;
-
-    const nextBtn = searchScope[currentIdx + 1];
-    if (!nextBtn || !/^\d+$/.test(nextBtn.textContent?.trim() ?? ""))
+async function waitForMonthDataLoaded(
+  frame: Frame,
+  year: number,
+  month: number
+): Promise<void> {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const p1 = `${year}.${pad(month)}`; // "2026.01"
+  const p2 = `${year}-${pad(month)}`; // "2026-01"
+  await frame.waitForFunction(
+    ({ p1, p2 }: { p1: string; p2: string }) => {
+      const tables = document.querySelectorAll("table.tui-grid-table");
+      const last = tables[tables.length - 1];
+      if (!last) return false;
+      const rows = Array.from(last.querySelectorAll("tbody tr"));
+      if (rows.length === 0) return true;
+      for (const row of rows) {
+        const text = row.querySelector("td")?.textContent?.trim() ?? "";
+        if (/^\d{4}/.test(text)) return text.startsWith(p1) || text.startsWith(p2);
+      }
       return false;
+    },
+    { p1, p2 },
+    { timeout: 15_000 }
+  );
+}
 
-    (nextBtn as HTMLElement).click();
-    return true;
-  });
+/** 페이지 번호(<strong>)가 expectedPage로 바뀔 때까지 대기 */
+async function waitForPageChange(
+  frame: Frame,
+  expectedPage: number
+): Promise<void> {
+  await frame.waitForFunction(
+    (expected: number) => {
+      const gridArea = document.querySelector("div.npay_grid_area");
+      if (!gridArea) return false;
+      const strong = gridArea.querySelector("strong");
+      return !!strong && parseInt(strong.textContent?.trim() ?? "0") === expected;
+    },
+    expectedPage,
+    { timeout: 10_000 }
+  );
 }
 
 /**
@@ -109,61 +117,20 @@ export async function scrapeNaverSettlement(
 
   // readonly 인풋 클릭 → 캘린더 선택 방식
   await setDateRangeWithCalendar(frame, year, month);
-
-  // 검색 결과 반영 대기:
-  // 기본 뷰가 이미 테이블에 있어 rows > 0 만으로는 불충분.
-  // 첫 번째 데이터 행의 날짜가 조회 월과 일치할 때까지 대기.
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const monthPrefix1 = `${year}.${pad(month)}`; // "2026.01"
-  const monthPrefix2 = `${year}-${pad(month)}`; // "2026-01"
-  await frame.waitForFunction(
-    ({ p1, p2 }: { p1: string; p2: string }) => {
-      const tables = document.querySelectorAll("table.tui-grid-table");
-      const last = tables[tables.length - 1];
-      if (!last) return false;
-      const rows = Array.from(last.querySelectorAll("tbody tr"));
-      // 데이터가 없는 달이면 행이 0개 → 로드 완료로 간주
-      if (rows.length === 0) return true;
-      for (const row of rows) {
-        const text = row.querySelector("td")?.textContent?.trim() ?? "";
-        if (/^\d{4}/.test(text)) {
-          return text.startsWith(p1) || text.startsWith(p2);
-        }
-      }
-      return false;
-    },
-    { p1: monthPrefix1, p2: monthPrefix2 },
-    { timeout: 15_000 }
-  );
+  await waitForMonthDataLoaded(frame, year, month);
 
   let totalSettlement = 0;
   let totalCommission = 0;
-  let pageIndex = 0;
 
-  while (true) {
-    if (pageIndex > 0) {
-      // 페이지 번호(<strong>)가 실제로 바뀔 때까지 대기
-      const expectedPage = pageIndex + 1;
-      await frame.waitForFunction(
-        (expected: number) => {
-          const gridArea = document.querySelector("div.npay_grid_area");
-          if (!gridArea) return false;
-          const strong = gridArea.querySelector("strong");
-          return strong && parseInt(strong.textContent?.trim() ?? "0") === expected;
-        },
-        expectedPage,
-        { timeout: 10_000 }
-      );
-    }
+  for (let pageIndex = 0; ; pageIndex++) {
+    if (pageIndex > 0) await waitForPageChange(frame, pageIndex + 1);
 
-    const { settlementAmount, commissionFee } =
-      await extractSettlementRows(frame);
+    const { settlementAmount, commissionFee } = await extractSettlementRows(frame);
     totalSettlement += settlementAmount;
     totalCommission += commissionFee;
 
-    const hasNext = await goToNextPage(frame);
+    const hasNext = await goToNextPageInGrid(frame);
     if (!hasNext) break;
-    pageIndex++;
   }
 
   return {
