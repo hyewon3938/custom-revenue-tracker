@@ -1,5 +1,5 @@
 import { Page } from "playwright";
-import { COUPANG_URLS } from "./coupang-auth";
+import { COUPANG_URLS, pad } from "./coupang-auth";
 import { calcEndDay } from "./naver-datepicker";
 
 export interface CoupangSettlementResult {
@@ -8,8 +8,6 @@ export interface CoupangSettlementResult {
   commissionFee: number; // 판매수수료
   adFee: number;         // 광고비
 }
-
-const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
  * 쿠팡 정산 캘린더에서 현재 왼쪽 패널의 연월 읽기.
@@ -69,6 +67,41 @@ async function navigateCalendarToMonth(
 }
 
 /**
+ * 정산 캘린더 오픈 대기.
+ * waitForSelector(visible) 은 Playwright 내부 visibility 기준이라 실패 가능 →
+ * custom-month-year-controller 의 bounding rect 가 0보다 커질 때까지 폴링.
+ */
+async function waitForCalendarOpen(page: Page): Promise<void> {
+  await page.waitForFunction(`
+    (function() {
+      var els = document.querySelectorAll('div.custom-month-year-controller');
+      for (var i = 0; i < els.length; i++) {
+        var r = els[i].getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return true;
+      }
+      return false;
+    })()
+  `, { timeout: 15_000 });
+}
+
+/**
+ * 정산 날짜 셀 클릭 (JS evaluate — 포인터 인터셉트 우회).
+ * mousedown + mouseup + click 순서로 Vue 컴포넌트 이벤트 핸들러 트리거.
+ */
+async function clickSettlementCell(page: Page, cellId: string): Promise<void> {
+  await page.evaluate(`
+    (function() {
+      var el = document.getElementById('${cellId}');
+      if (!el) throw new Error('settlement cell not found: ${cellId}');
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true }));
+    })()
+  `);
+  await page.waitForTimeout(400);
+}
+
+/**
  * 쿠팡 로켓그로스 정산 → 매출·물류비·수수료·광고비 추출
  * 대상: https://wing.coupang.com/tenants/rfm/settlements/home
  *
@@ -97,46 +130,16 @@ export async function scrapeCoupangSettlement(
   const startId = `${year}-${pad(month)}-01`;
   const endId = `${year}-${pad(month)}-${pad(endDay)}`;
 
-  // 날짜 범위 선택 버튼 클릭
+  // 날짜 범위 선택 버튼 클릭 후 캘린더 오픈 대기
   await page.click("button.custom-selection");
-  // 달력 오픈 확인: custom-month-year-controller 의 bounding rect 가 0보다 커질 때까지 대기
-  // waitForSelector(visible) 은 Playwright 내부 visibility 기준이라 실패할 수 있음
-  await page.waitForFunction(`
-    (function() {
-      var els = document.querySelectorAll('div.custom-month-year-controller');
-      for (var i = 0; i < els.length; i++) {
-        var r = els[i].getBoundingClientRect();
-        if (r.width > 0 && r.height > 0) return true;
-      }
-      return false;
-    })()
-  `, { timeout: 15_000 });
+  await waitForCalendarOpen(page);
 
-  // 시작월로 이동 후 시작일 클릭 (JS evaluate — 포인터 인터셉트 우회)
+  // 시작일 · 종료일 선택
   await navigateCalendarToMonth(page, year, month);
-  await page.evaluate(`
-    (function() {
-      var el = document.getElementById('${startId}');
-      if (!el) throw new Error('settlement cell not found: ${startId}');
-      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-      el.dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true }));
-      el.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true }));
-    })()
-  `);
-  await page.waitForTimeout(400);
+  await clickSettlementCell(page, startId);
 
-  // 종료일 선택 (같은 달)
   await navigateCalendarToMonth(page, year, month);
-  await page.evaluate(`
-    (function() {
-      var el = document.getElementById('${endId}');
-      if (!el) throw new Error('settlement cell not found: ${endId}');
-      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-      el.dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true }));
-      el.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true }));
-    })()
-  `);
-  await page.waitForTimeout(400);
+  await clickSettlementCell(page, endId);
 
   // 완료 버튼 (networkidle 없이 — SPA라 idle이 오지 않을 수 있음)
   await page.click('button:has-text("완료")');

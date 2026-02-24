@@ -1,6 +1,6 @@
 import { Page } from "playwright";
 import { ProductSales } from "@/lib/types";
-import { COUPANG_URLS } from "./coupang-auth";
+import { COUPANG_URLS, pad } from "./coupang-auth";
 import { detectCategory } from "./naver-orders";
 import { calcEndDay } from "./naver-datepicker";
 
@@ -8,8 +8,6 @@ export interface CoupangSalesResult {
   totalRevenue: number;
   products: ProductSales[];
 }
-
-const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
  * 쿠팡 팝업 닫기.
@@ -71,15 +69,10 @@ async function readDpCalendarMonth(
 }
 
 /**
- * dp__ 날짜 셀 클릭 (문자열 스크립트 사용).
- * page.click()이 <html> 포인터 이벤트 인터셉트로 실패하는 경우 대응.
- * tsx/esbuild의 __name 헬퍼 주입을 피하기 위해 문자열 형태의 evaluate 사용.
- * 동일 id가 2개(1월 overflow + 2월 패널)일 때는 마지막 요소를 클릭.
- */
-/**
- * dp__ 날짜 셀 클릭.
- * useLast=true  → els[els.length-1]: 첫째 날 (이전 패널 overflow가 els[0]이므로 마지막이 실제 셀)
- * useLast=false → els[0]           : 말일    (다음 패널 overflow가 els[마지막]이므로 첫 번째가 실제 셀)
+ * dp__ 날짜 셀 클릭 (JS evaluate — <html> 포인터 인터셉트 우회).
+ * 2-month range picker에서 동일 id가 두 패널에 중복 존재하는 경우 대응:
+ *   useLast=true  → 마지막 요소: 첫째 날 (이전 패널 overflow는 els[0], 실제 셀은 마지막)
+ *   useLast=false → 첫 번째 요소: 말일 (다음 패널 overflow가 마지막, 실제 셀은 첫 번째)
  */
 async function clickDpCell(page: Page, cellId: string, useLast = true): Promise<void> {
   const elPicker = useLast ? 'els[els.length - 1]' : 'els[0]';
@@ -108,8 +101,7 @@ async function navigateDpCalendarToMonth(
   targetYear: number,
   targetMonth: number
 ): Promise<void> {
-  const p = (n: number) => String(n).padStart(2, "0");
-  const probeId = `dp-${targetYear}-${p(targetMonth)}-01`;
+  const probeId = `dp-${targetYear}-${pad(targetMonth)}-01`;
   const MAX = 24;
 
   for (let i = 0; i < MAX; i++) {
@@ -164,14 +156,11 @@ export async function scrapeCoupangSalesAnalysis(
     throw new Error("쿠팡 세션이 만료되었습니다. 다시 로그인 후 수집하세요.");
   }
 
-  // 초기 팝업 닫기
-  await dismissPopup(page);
-
   const endDay = calcEndDay(year, month);
   const startId = `dp-${year}-${pad(month)}-01`;
   const endId = `dp-${year}-${pad(month)}-${pad(endDay)}`;
 
-  // 날짜 필터 트리거 클릭
+  // 팝업 닫기 후 날짜 필터 트리거 클릭
   // 실제 HTML: <div class="_container_podij_1 context-trigger-filter" ...>
   //   <span>최근 7일</span><i title="calendar">
   // 페이지에 context-trigger-filter 가 여러 개 있으므로 "최근 7일" 텍스트로 특정

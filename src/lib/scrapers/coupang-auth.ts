@@ -2,6 +2,9 @@ import { Page } from "playwright";
 
 export const COUPANG_BASE = "https://wing.coupang.com";
 
+/** 2자리 zero-padding */
+export const pad = (n: number): string => String(n).padStart(2, "0");
+
 export const COUPANG_URLS = {
   home: COUPANG_BASE,
   // 쿠팡 판매분석
