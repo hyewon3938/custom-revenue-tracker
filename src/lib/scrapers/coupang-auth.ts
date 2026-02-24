@@ -10,31 +10,50 @@ export const COUPANG_URLS = {
   settlement: `${COUPANG_BASE}/tenants/rfm/settlements/home`,
 } as const;
 
+const MANUAL_LOGIN_TIMEOUT = 5 * 60 * 1_000; // 5분
+
+/**
+ * 쿠팡 Wing 로그인.
+ *
+ * 브라우저를 열어 두고 최대 5분간 수동 로그인을 대기.
+ *
+ * 주의: wing.coupang.com은 지속적인 백그라운드 XHR이 있어
+ *       waitForLoadState("networkidle")이 타임아웃됨 → "load" 사용.
+ */
 export async function loginCoupang(page: Page): Promise<void> {
-  const username = process.env.COUPANG_USERNAME;
-  const password = process.env.COUPANG_PASSWORD;
-
-  if (!username || !password) {
-    throw new Error(
-      "COUPANG_USERNAME, COUPANG_PASSWORD 환경변수가 필요합니다."
-    );
-  }
-
   await page.goto(COUPANG_BASE);
-  await page.waitForLoadState("networkidle");
 
-  // 이미 Wing에 로그인된 경우 스킵
-  if (!page.url().includes("login") && page.url().startsWith(COUPANG_BASE)) {
-    return;
+  // JS 리다이렉트가 완료될 때까지 대기
+  await page.waitForURL(
+    (url) =>
+      url.href.includes("/login") ||
+      url.href.includes("/auth") ||
+      (url.href.startsWith(COUPANG_BASE) && !url.href.includes("login") && !url.href.includes("auth")),
+    { timeout: 15_000 }
+  ).catch(() => {});
+
+  const isLoggedIn = () => {
+    const url = page.url();
+    return (
+      url.startsWith(COUPANG_BASE) &&
+      !url.includes("/login") &&
+      !url.includes("/auth")
+    );
+  };
+
+  if (isLoggedIn()) return;
+
+  console.log(
+    "[쿠팡] 브라우저에서 직접 로그인하세요. 완료 후 자동으로 진행됩니다. (최대 5분)"
+  );
+  const deadline = Date.now() + MANUAL_LOGIN_TIMEOUT;
+  while (Date.now() < deadline) {
+    if (isLoggedIn()) {
+      await page.waitForLoadState("load");
+      await page.waitForTimeout(1_500);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 1_000));
   }
-
-  // TODO: 실제 로그인 셀렉터 확인 필요
-  // 쿠팡 Wing 로그인 페이지
-  await page.waitForSelector("#username", { timeout: 10_000 });
-  await page.fill("#username", username);
-  await page.fill("#password", password);
-  await page.click('button[type="submit"]');
-
-  await page.waitForURL(`${COUPANG_BASE}/**`, { timeout: 20_000 });
-  await page.waitForLoadState("networkidle");
+  throw new Error("쿠팡 로그인 타임아웃 (5분 초과). 다시 시도하세요.");
 }
