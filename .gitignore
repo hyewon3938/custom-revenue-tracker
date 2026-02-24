@@ -44,5 +44,8 @@ next-env.d.ts
 # 실제 수집된 매출 데이터 (개인 사업 정보 - 커밋하지 말 것)
 /data/reports/*.json
 
+# 실제 상품명 매핑 데이터 (사업 정보 - 커밋하지 말 것, product-mapping.example.json 참고)
+/data/product-mapping.json
+
 # 테스트 스크린샷
 /scripts/*.png

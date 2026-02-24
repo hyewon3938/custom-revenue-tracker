@@ -5,7 +5,8 @@ interface Props {
 }
 
 export default function MatrixSection({ matrix }: Props) {
-  if (matrix.length === 0) return null;
+  const visibleRows = matrix.filter((row) => row.total > 0);
+  if (visibleRows.length === 0) return null;
 
   return (
     <section>
@@ -34,7 +35,7 @@ export default function MatrixSection({ matrix }: Props) {
             </tr>
           </thead>
           <tbody>
-            {matrix.map((row, idx) => (
+            {visibleRows.map((row, idx) => (
               <tr
                 key={row.productName}
                 className={`border-b border-gray-50 last:border-0 ${idx % 2 === 1 ? "bg-gray-50/40" : "bg-white"}`}

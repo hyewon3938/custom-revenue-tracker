@@ -221,6 +221,7 @@ export default function DashboardPage() {
             naver={report.naver}
             coupang={report.coupang}
             offline={report.offline}
+            productMatrix={report.productMatrix}
             onUpdate={handleUpdate}
           />
 

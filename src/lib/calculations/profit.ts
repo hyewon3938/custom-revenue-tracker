@@ -241,13 +241,26 @@ export function calcProductMatrix(
     { category: ProductCategory; naver: number; coupang: number; offline: number }
   >();
 
+  // 매핑에 등록된 canonical명 전체를 0으로 초기 세팅
+  // → 이번 달 판매 없는 상품도 리스트·오프라인 입력란에 표시됨
+  if (mapping) {
+    for (const m of mapping.mappings) {
+      if (!map.has(m.canonical)) {
+        map.set(m.canonical, { category: "handmade", naver: 0, coupang: 0, offline: 0 });
+      }
+    }
+  }
+
   const add = (products: ProductSales[], platform: Platform) => {
     for (const p of products) {
       const key = toCanonical(p.productName, platform);
       if (!map.has(key)) {
         map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
       }
-      map.get(key)![platform] += p.quantity;
+      const entry = map.get(key)!;
+      entry[platform] += p.quantity;
+      // 실제 판매 데이터로 카테고리 보정
+      if (p.quantity > 0) entry.category = p.category;
     }
   };
 

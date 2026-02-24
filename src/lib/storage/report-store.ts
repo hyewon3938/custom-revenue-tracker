@@ -81,9 +81,33 @@ export async function updateReport(
   const coupang = updates.coupang
     ? deepMerge(existing.coupang, updates.coupang)
     : existing.coupang;
-  const offline = updates.offline
+  const offlineMerged = updates.offline
     ? deepMerge(existing.offline, updates.offline)
     : existing.offline;
+
+  // offline.products가 교체됐으면 수량 합계 + 입점 수수료 자동 계산
+  // 입점 수수료율은 환경변수로 관리 (수기로 직접 수정 가능)
+  const offlineCommissionPerItem = parseInt(
+    process.env.OFFLINE_COMMISSION_PER_ITEM ?? "0"
+  );
+  const offline: OfflineData = (() => {
+    if (updates.offline?.products === undefined) return offlineMerged;
+    const totalQuantity = offlineMerged.products.reduce((s, p) => s + p.quantity, 0);
+    return {
+      ...offlineMerged,
+      totalQuantity,
+      handmadeQuantity: offlineMerged.products
+        .filter((p) => p.category === "handmade")
+        .reduce((s, p) => s + p.quantity, 0),
+      otherQuantity: offlineMerged.products
+        .filter((p) => p.category === "other")
+        .reduce((s, p) => s + p.quantity, 0),
+      fees: {
+        ...offlineMerged.fees,
+        commissionFee: totalQuantity * offlineCommissionPerItem,
+      },
+    };
+  })();
 
   // 플랫폼 데이터가 변경되면 이익·요약·랭킹 재계산
   const naverWithProfit: NaverData = {
