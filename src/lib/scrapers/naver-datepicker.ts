@@ -1,5 +1,58 @@
 import { Frame } from "playwright";
 
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * 종료일 계산:
+ *  - 현재 월 → 어제 (오늘 날짜는 데이터 미확정이므로 제외)
+ *  - 과거 월 → 말일
+ *  - 안전 하한: 최소 1일
+ */
+export function calcEndDay(year: number, month: number): number {
+  const today = new Date();
+  const isCurrentMonth =
+    today.getFullYear() === year && today.getMonth() + 1 === month;
+  const lastDayOfMonth = new Date(year, month, 0).getDate();
+  return isCurrentMonth
+    ? Math.max(today.getDate() - 1, 1)
+    : lastDayOfMonth;
+}
+
+/**
+ * TOAST UI Date Input 방식 날짜 범위 설정 + 검색.
+ *
+ * 대상 페이지: 정산내역, 주문통합검색
+ * - 날짜 입력 필드: input[title="날짜선택"] (YYYY.MM.DD 형식)
+ * - 시작일 = 해당 월 1일, 종료일 = 말일(과거) 또는 어제(현재 월)
+ * - 검색 버튼: button:has-text("검색")
+ */
+export async function setDateInputRange(
+  frame: Frame,
+  year: number,
+  month: number
+): Promise<void> {
+  const endDay = calcEndDay(year, month);
+  const startDate = `${year}.${pad(month)}.01`;
+  const endDate = `${year}.${pad(month)}.${pad(endDay)}`;
+
+  const dateInputs = frame.locator('input[title="날짜선택"]');
+
+  // fill() 은 이벤트를 발생시키지 않아 TOAST UI 가 무시함 → pressSequentially 사용
+  await dateInputs.nth(0).click({ clickCount: 3 });
+  await dateInputs.nth(0).pressSequentially(startDate);
+  await dateInputs.nth(0).press("Tab");
+  await frame.waitForTimeout(300);
+
+  await dateInputs.nth(1).click({ clickCount: 3 });
+  await dateInputs.nth(1).pressSequentially(endDate);
+  await dateInputs.nth(1).press("Tab");
+  await frame.waitForTimeout(300);
+
+  await frame.click('button.size_large.type_green:has-text("검색")');
+  await frame.waitForLoadState("networkidle");
+}
+
+
 /**
  * 네이버 스마트스토어 공통 react-datepicker 헬퍼
  * 헤더 형식: "2025.10" / 날짜 셀 클래스: react-datepicker__day--XXX (3자리)
@@ -14,13 +67,26 @@ const SEL = {
   toButton:
     '[data-testid="DatePicker::Button::PeriodPicker::To::"]',
   calendar: ".react-datepicker",
-  // 커스텀 헤더 버튼 (텍스트 기반 - 해시 클래스보다 안정적)
   prevMonth: '.react-datepicker__header--custom button:has-text("이전 달")',
   nextMonth: '.react-datepicker__header--custom button:has-text("다음 달")',
   searchButton: 'button.size_large.type_green:has-text("검색")',
-  dayCell: (day: number) =>
-    `.react-datepicker__day--${String(day).padStart(3, "0")}:not(.react-datepicker__day--outside-month)`,
 } as const;
+
+/**
+ * 달력에서 특정 날(숫자)을 텍스트 기반으로 클릭.
+ * 클래스명 형식(001 vs 01 vs 1)에 무관하게 동작.
+ * outside-month 셀은 제외.
+ */
+async function clickCalendarDay(page: Frame, day: number): Promise<void> {
+  // outside-month 제외한 날짜 셀 중 텍스트가 정확히 일치하는 셀을 Playwright locator로 클릭
+  // (evaluate 기반 click은 React 이벤트 시스템에 전달되지 않는 경우 있음)
+  const cell = page
+    .locator("[class*='react-datepicker__day']:not([class*='outside-month'])")
+    .filter({ hasText: new RegExp(`^${day}$`) })
+    .first();
+  await cell.waitFor({ state: "visible", timeout: 5_000 });
+  await cell.click();
+}
 
 /**
  * 현재 달력 헤더에서 연월 파싱 ("2026.02" → { year: 2026, month: 2 })
@@ -92,6 +158,44 @@ async function navigateToMonth(
 }
 
 /**
+ * readonly 날짜 인풋(클릭 시 react-datepicker 오픈) 방식 날짜 범위 설정.
+ *
+ * 대상: 네이버 정산내역 (`/e/v3/settlemgt/`)
+ * - 날짜 인풋: input[title="날짜선택"] readonly (클릭 → 달력 오픈)
+ * - 검색 버튼: button.size_large.type_green:has-text("검색")
+ */
+export async function setDateRangeWithCalendar(
+  frame: Frame,
+  year: number,
+  month: number
+): Promise<void> {
+  const endDay = calcEndDay(year, month);
+
+  // data-testid 부분 일치로 시작일/종료일 인풋 특정
+  // (input[title="날짜선택"]이 페이지에 여러 개일 수 있어 nth(0) 오작동 방지)
+  const startInput = frame.locator('[data-testid*="Input::DateRange::From"]');
+  const endInput = frame.locator('[data-testid*="Input::DateRange::To"]');
+
+  // 시작일: 인풋 클릭 → 캘린더 오픈 → 1일 선택
+  await startInput.click();
+  await frame.waitForSelector(".react-datepicker", { state: "visible", timeout: 5_000 });
+  await navigateToMonth(frame, year, month);
+  await clickCalendarDay(frame, 1);
+  await frame.waitForTimeout(300);
+
+  // 종료일: 인풋 클릭 → 캘린더 오픈 → 말일/어제 선택
+  await endInput.click();
+  await frame.waitForSelector(".react-datepicker", { state: "visible", timeout: 5_000 });
+  await navigateToMonth(frame, year, month);
+  await clickCalendarDay(frame, endDay);
+  await frame.waitForTimeout(300);
+
+  // 검색
+  await frame.click('button.size_large.type_green:has-text("검색")');
+  await frame.waitForLoadState("networkidle");
+}
+
+/**
  * 시작일(1일) ~ 종료일(말일) 선택 후 검색 버튼 클릭
  *
  * @param page    Playwright Page
@@ -103,19 +207,19 @@ export async function selectMonthRangeAndSearch(
   year: number,
   month: number
 ): Promise<void> {
-  const lastDay = new Date(year, month, 0).getDate();
+  const endDay = calcEndDay(year, month);
 
   // 1) 시작일: 해당 월 1일 선택
   await page.click(SEL.fromButton);
   await page.waitForSelector(SEL.calendar, { state: "visible" });
   await navigateToMonth(page, year, month);
-  await page.click(SEL.dayCell(1));
+  await clickCalendarDay(page, 1);
 
-  // 2) 종료일: 해당 월 말일 선택
+  // 2) 종료일: 말일(과거 월) 또는 어제(현재 월)
   await page.click(SEL.toButton);
   await page.waitForSelector(SEL.calendar, { state: "visible" });
   await navigateToMonth(page, year, month);
-  await page.click(SEL.dayCell(lastDay));
+  await clickCalendarDay(page, endDay);
 
   // 3) 검색
   await page.click(SEL.searchButton);
