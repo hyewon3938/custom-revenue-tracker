@@ -1,5 +1,12 @@
 import { chromium } from "playwright";
-import { MonthlyReport, PlatformData, OfflineData } from "@/lib/types";
+import {
+  MonthlyReport,
+  NaverData,
+  CoupangData,
+  OfflineData,
+  PlatformFees,
+  ShippingStats,
+} from "@/lib/types";
 import { loginNaver } from "./naver-auth";
 import { loginCoupang } from "./coupang-auth";
 import { scrapeNaverOrders } from "./naver-orders";
@@ -8,28 +15,59 @@ import { scrapeNaverSettlement } from "./naver-settlement";
 import { scrapeCoupangSalesAnalysis } from "./coupang-sales";
 import { scrapeCoupangSettlement } from "./coupang-settlement";
 import {
-  calculateProfit,
-  calculateHandmadeRanking,
+  calcOnlineProfit,
+  calcOfflineProfit,
+  calcOverallSummary,
+  calcPlatformRanking,
+  calcOverallRanking,
+  calcProductMatrix,
 } from "@/lib/calculations/profit";
 
-const EMPTY_FEES = {
+const EMPTY_FEES: PlatformFees = {
   settlementAmount: 0,
   logisticsFee: 0,
   commissionFee: 0,
-  shippingFee: 0,
   adFee: 0,
 };
+
+const EMPTY_SHIPPING_STATS: ShippingStats = {
+  regularCount: 0,
+  freeCount: 0,
+  sellerCost: 0,
+};
+
+/**
+ * 조회 기간 결정:
+ * - 이번 달이면 1일 ~ 어제
+ * - 지난 달(과거)이면 1일 ~ 말일
+ */
+export function getDateRange(
+  year: number,
+  month: number
+): { start: string; end: string } {
+  const today = new Date();
+  const isCurrentMonth =
+    today.getFullYear() === year && today.getMonth() + 1 === month;
+
+  const lastDay = new Date(year, month, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const endDay = isCurrentMonth ? today.getDate() - 1 : lastDay;
+
+  return {
+    start: `${year}-${pad(month)}-01`,
+    end: `${year}-${pad(month)}-${pad(endDay)}`,
+  };
+}
 
 async function collectNaverData(
   year: number,
   month: number
-): Promise<PlatformData> {
+): Promise<NaverData> {
   const browser = await chromium.launch({
-    // headless: false → 2FA·캡차 대응 및 로그인 상태 확인용
     headless: false,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
-
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -39,28 +77,40 @@ async function collectNaverData(
   try {
     await loginNaver(page);
 
-    // 세 페이지를 순차 수집 (같은 브라우저 컨텍스트, 같은 세션 공유)
-    const [salesResult, fees, products] = await Promise.allSettled([
-      scrapeNaverSalesAnalysis(page, year, month),
-      scrapeNaverSettlement(page, year, month),
-      scrapeNaverOrders(page, year, month),
-    ]);
+    // 순차 수집 (세션 공유)
+    const salesResult = await scrapeNaverSalesAnalysis(page, year, month).catch(
+      (e) => { console.error("[naver-sales]", e); return null; }
+    );
+    const settlementResult = await scrapeNaverSettlement(page, year, month).catch(
+      (e) => { console.error("[naver-settlement]", e); return null; }
+    );
+    const productsResult = await scrapeNaverOrders(page, year, month).catch(
+      (e) => { console.error("[naver-orders]", e); return []; }
+    );
 
-    if (salesResult.status === "rejected")
-      console.error("[naver-sales] 오류:", salesResult.reason);
-    if (fees.status === "rejected")
-      console.error("[naver-settlement] 오류:", fees.reason);
-    if (products.status === "rejected")
-      console.error("[naver-orders] 오류:", products.reason);
+    const revenue = salesResult?.totalRevenue ?? 0;
+    const shippingStats = salesResult?.shippingStats ?? EMPTY_SHIPPING_STATS;
+    const fees: PlatformFees = {
+      commissionFee: settlementResult?.commissionFee ?? 0,
+      logisticsFee: shippingStats.sellerCost, // 네이버 물류비 = 판매자 부담 배송비
+      adFee: 0, // 수기 입력
+      settlementAmount: settlementResult?.settlementAmount ?? 0,
+    };
+    const products = productsResult ?? [];
+    const handmadeQuantity = products
+      .filter((p) => p.category === "handmade")
+      .reduce((s, p) => s + p.quantity, 0);
+    const totalQuantity = products.reduce((s, p) => s + p.quantity, 0);
 
     return {
-      platform: "naver",
-      revenue:
-        salesResult.status === "fulfilled"
-          ? salesResult.value.totalRevenue
-          : 0,
-      fees: fees.status === "fulfilled" ? fees.value : EMPTY_FEES,
-      products: products.status === "fulfilled" ? products.value : [],
+      revenue,
+      totalQuantity,
+      handmadeQuantity,
+      otherQuantity: totalQuantity - handmadeQuantity,
+      fees,
+      shippingStats,
+      profit: calcOnlineProfit(revenue, fees),
+      products,
     };
   } finally {
     await context.close();
@@ -71,12 +121,11 @@ async function collectNaverData(
 async function collectCoupangData(
   year: number,
   month: number
-): Promise<PlatformData> {
+): Promise<CoupangData> {
   const browser = await chromium.launch({
     headless: false,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
-
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -86,26 +135,34 @@ async function collectCoupangData(
   try {
     await loginCoupang(page);
 
-    const [salesResult, fees] = await Promise.allSettled([
-      scrapeCoupangSalesAnalysis(page, year, month),
-      scrapeCoupangSettlement(page, year, month),
-    ]);
+    const salesResult = await scrapeCoupangSalesAnalysis(page, year, month).catch(
+      (e) => { console.error("[coupang-sales]", e); return null; }
+    );
+    const settlementResult = await scrapeCoupangSettlement(page, year, month).catch(
+      (e) => { console.error("[coupang-settlement]", e); return null; }
+    );
 
-    if (salesResult.status === "rejected")
-      console.error("[coupang-sales] 오류:", salesResult.reason);
-    if (fees.status === "rejected")
-      console.error("[coupang-settlement] 오류:", fees.reason);
-
-    const sales =
-      salesResult.status === "fulfilled"
-        ? salesResult.value
-        : { totalRevenue: 0, products: [] };
+    const revenue = settlementResult?.revenue ?? 0;
+    const fees: PlatformFees = {
+      commissionFee: settlementResult?.commissionFee ?? 0,
+      logisticsFee: settlementResult?.logisticsFee ?? 0,
+      adFee: settlementResult?.adFee ?? 0,
+      settlementAmount: 0, // 쿠팡은 정산금 없음
+    };
+    const products = salesResult?.products ?? [];
+    const handmadeQuantity = products
+      .filter((p) => p.category === "handmade")
+      .reduce((s, p) => s + p.quantity, 0);
+    const totalQuantity = products.reduce((s, p) => s + p.quantity, 0);
 
     return {
-      platform: "coupang",
-      revenue: sales.totalRevenue,
-      fees: fees.status === "fulfilled" ? fees.value : EMPTY_FEES,
-      products: sales.products,
+      revenue,
+      totalQuantity,
+      handmadeQuantity,
+      otherQuantity: totalQuantity - handmadeQuantity,
+      fees,
+      profit: calcOnlineProfit(revenue, fees),
+      products,
     };
   } finally {
     await context.close();
@@ -115,39 +172,62 @@ async function collectCoupangData(
 
 /**
  * 네이버·쿠팡 데이터를 수집하고 MonthlyReport(insights 제외)를 반환.
- * 오프라인 매출은 초기값 0으로 설정 — 이후 /api/report PATCH로 수기 입력.
+ * 오프라인(고산의낮) 데이터는 0으로 초기화 — 이후 /api/report PATCH로 수기 입력.
  */
 export async function collectMonthlyData(
   year: number,
   month: number
 ): Promise<Omit<MonthlyReport, "insights">> {
-  // 네이버·쿠팡 브라우저를 병렬로 실행
+  const dateRange = getDateRange(year, month);
+
   const [naverData, coupangData] = await Promise.all([
     collectNaverData(year, month),
     collectCoupangData(year, month),
   ]);
 
+  const offlineFees: PlatformFees = EMPTY_FEES;
   const offline: OfflineData = {
+    venueName: "고산의낮",
     revenue: 0,
+    totalQuantity: 0,
+    handmadeQuantity: 0,
+    otherQuantity: 0,
+    fees: offlineFees,
+    profit: calcOfflineProfit(0, offlineFees),
     products: [],
-    fees: { logisticsFee: 0, shippingFee: 0 },
   };
 
-  const profit = calculateProfit(naverData, coupangData, offline);
-  const handmadeRanking = calculateHandmadeRanking(
-    naverData,
-    coupangData,
-    offline
+  const summary = calcOverallSummary(naverData, coupangData, offline);
+  const naverRanking = calcPlatformRanking(naverData.products, 3);
+  const coupangRanking = calcPlatformRanking(coupangData.products, 3);
+  const offlineRanking = calcPlatformRanking(offline.products, 3);
+  const overallRanking = calcOverallRanking(
+    naverData.products,
+    coupangData.products,
+    offline.products,
+    null, // 매핑 없이 초기 수집
+    5
+  );
+  const productMatrix = calcProductMatrix(
+    naverData.products,
+    coupangData.products,
+    offline.products,
+    null
   );
 
   const now = new Date().toISOString();
   return {
     period: { year, month },
+    dataRange: dateRange,
     naver: naverData,
     coupang: coupangData,
     offline,
-    profit,
-    handmadeRanking,
+    summary,
+    naverRanking,
+    coupangRanking,
+    offlineRanking,
+    overallRanking,
+    productMatrix,
     collectedAt: now,
     lastModifiedAt: now,
   };

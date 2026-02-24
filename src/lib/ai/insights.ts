@@ -1,69 +1,74 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MonthlyReport, SalesInsight } from "@/lib/types";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// 모듈 로드 시 초기화하지 않음 (API 키 없으면 생성자 자체가 throw)
+function getClient(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error(
+      "ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. .env.local에 추가하세요."
+    );
+  }
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
 
 const formatKRW = (n: number) =>
   n.toLocaleString("ko-KR", { style: "currency", currency: "KRW" });
 
 function buildPrompt(report: Omit<MonthlyReport, "insights">): string {
-  const { period, naver, coupang, offline, profit, handmadeRanking } = report;
-
-  const feeDetail = (label: string, fees: typeof naver.fees) =>
-    `  - 정산금: ${formatKRW(fees.settlementAmount)}\n` +
-    `  - 물류비: ${formatKRW(fees.logisticsFee)}\n` +
-    `  - 수수료: ${formatKRW(fees.commissionFee)}\n` +
-    `  - 배송비: ${formatKRW(fees.shippingFee)}\n` +
-    `  - 광고비: ${formatKRW(fees.adFee)}`;
+  const { period, naver, coupang, offline, summary, overallRanking } = report;
 
   return `
 ## 분석 기간
-${period.year}년 ${period.month}월
+${period.year}년 ${period.month}월 (${report.dataRange.start} ~ ${report.dataRange.end})
 
-## 플랫폼별 매출
-- 네이버: ${formatKRW(naver.revenue)}
-- 쿠팡:   ${formatKRW(coupang.revenue)}
-- 오프라인: ${formatKRW(offline.revenue)}
+## 플랫폼별 매출 및 비용
+### 네이버
+- 매출: ${formatKRW(naver.revenue)}
+- 수수료: ${formatKRW(naver.fees.commissionFee)}
+- 물류비: ${formatKRW(naver.fees.logisticsFee)} (일반배송 ${naver.shippingStats.regularCount}건 / 무료배송 ${naver.shippingStats.freeCount}건)
+- 광고비: ${formatKRW(naver.fees.adFee)}
+- 정산금: ${formatKRW(naver.fees.settlementAmount)}
+- 이익: ${formatKRW(naver.profit.profit)} / 순이익: ${formatKRW(naver.profit.netProfit)}
 
-## 네이버 정산/비용 내역
-${feeDetail("네이버", naver.fees)}
+### 쿠팡
+- 매출: ${formatKRW(coupang.revenue)}
+- 수수료: ${formatKRW(coupang.fees.commissionFee)}
+- 물류비: ${formatKRW(coupang.fees.logisticsFee)}
+- 광고비: ${formatKRW(coupang.fees.adFee)}
+- 이익: ${formatKRW(coupang.profit.profit)} / 순이익: ${formatKRW(coupang.profit.netProfit)}
 
-## 쿠팡 정산/비용 내역
-${feeDetail("쿠팡", coupang.fees)}
+### 오프라인 (${offline.venueName})
+- 매출: ${formatKRW(offline.revenue)}
+- 수수료: ${formatKRW(offline.fees.commissionFee)}
+- 물류비: ${formatKRW(offline.fees.logisticsFee)}
+- 광고비: ${formatKRW(offline.fees.adFee)}
+- 이익: ${formatKRW(offline.profit.profit)} / 순이익: ${formatKRW(offline.profit.netProfit)}
 
-## 수익 요약
-- 최종 매출: ${formatKRW(profit.totalRevenue)}
-- 플랫폼 총 비용: ${formatKRW(profit.platformFees)}
-- 재료비 (15%): ${formatKRW(profit.materialCost)}
-- 최종 이익: ${formatKRW(profit.grossProfit)}
-- 순이익: ${formatKRW(profit.netProfit)}
+## 전체 요약
+- 총 매출: ${formatKRW(summary.totalRevenue)}
+- 총 이익: ${formatKRW(summary.totalProfit)}
+- 총 부자재비: ${formatKRW(summary.totalMaterialCost)}
+- 총 순이익: ${formatKRW(summary.totalNetProfit)}
 
-## 끈갈피(핸드메이드) 판매 TOP 5
+## 판매량
+- 전체: ${summary.totalQuantity}개 (끈갈피 ${summary.handmadeQuantity}개 / 기타 ${summary.otherQuantity}개)
+
+## 상품별 판매 TOP 5
 ${
-  handmadeRanking.length > 0
-    ? handmadeRanking
+  overallRanking.length > 0
+    ? overallRanking
         .map(
           (r) =>
-            `${r.rank}위. ${r.productName}: ${r.totalQuantity}개 / ${formatKRW(r.totalRevenue)}`
+            `${r.rank}위. ${r.productName}: 총 ${r.total}개 (네이버 ${r.naver} / 쿠팡 ${r.coupang} / 오프라인 ${r.offline})`
         )
         .join("\n")
     : "데이터 없음"
 }
-
-## 제품 카테고리별 판매량
-- 핸드메이드(끈갈피): ${[...naver.products, ...coupang.products, ...offline.products]
-    .filter((p) => p.category === "handmade")
-    .reduce((s, p) => s + p.quantity, 0)}개
-- 기타 상품: ${[...naver.products, ...coupang.products, ...offline.products]
-    .filter((p) => p.category === "other")
-    .reduce((s, p) => s + p.quantity, 0)}개
 `.trim();
 }
 
 /**
- * Claude API를 사용해 이번 달 판매 인사이트 생성.
+ * Claude API를 사용해 월간 판매 인사이트 생성.
  * claude-opus-4-6 모델 사용.
  */
 export async function generateSalesInsights(
@@ -71,7 +76,7 @@ export async function generateSalesInsights(
 ): Promise<SalesInsight[]> {
   const prompt = buildPrompt(report);
 
-  const message = await client.messages.create({
+  const message = await getClient().messages.create({
     model: "claude-opus-4-6",
     max_tokens: 2048,
     system: `당신은 이커머스 전문 데이터 분석가입니다.

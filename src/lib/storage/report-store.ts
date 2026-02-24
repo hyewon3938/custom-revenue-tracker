@@ -1,9 +1,18 @@
 import fs from "fs/promises";
 import path from "path";
-import { MonthlyReport, PlatformData, OfflineData } from "@/lib/types";
 import {
-  calculateProfit,
-  calculateHandmadeRanking,
+  MonthlyReport,
+  NaverData,
+  CoupangData,
+  OfflineData,
+} from "@/lib/types";
+import {
+  calcOnlineProfit,
+  calcOfflineProfit,
+  calcOverallSummary,
+  calcPlatformRanking,
+  calcOverallRanking,
+  calcProductMatrix,
 } from "@/lib/calculations/profit";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
@@ -46,28 +55,23 @@ export async function loadReport(
  * 수기 편집용 업데이트 함수.
  *
  * updates에 포함된 필드만 기존 레포트에 병합하고,
- * naver·coupang·offline 중 하나라도 변경되면 profit·handmadeRanking 재계산.
- *
- * 사용 예:
- *   // 네이버 광고비만 수정
- *   await updateReport(2026, 2, { naver: { fees: { adFee: 150000 } } });
- *
- *   // 오프라인 매출 입력
- *   await updateReport(2026, 2, { offline: { revenue: 500000 } });
+ * 플랫폼 데이터가 변경되면 profit·summary·ranking 자동 재계산.
  */
 export async function updateReport(
   year: number,
   month: number,
   updates: {
-    naver?: DeepPartial<PlatformData>;
-    coupang?: DeepPartial<PlatformData>;
+    naver?: DeepPartial<NaverData>;
+    coupang?: DeepPartial<CoupangData>;
     offline?: DeepPartial<OfflineData>;
     insights?: MonthlyReport["insights"];
   }
 ): Promise<MonthlyReport> {
   const existing = await loadReport(year, month);
   if (!existing) {
-    throw new Error(`${year}년 ${month}월 레포트가 없습니다. 먼저 수집을 실행해주세요.`);
+    throw new Error(
+      `${year}년 ${month}월 레포트가 없습니다. 먼저 수집을 실행해주세요.`
+    );
   }
 
   const naver = updates.naver
@@ -80,17 +84,53 @@ export async function updateReport(
     ? deepMerge(existing.offline, updates.offline)
     : existing.offline;
 
-  // 플랫폼 데이터가 변경되면 수익·랭킹 재계산
-  const profit = calculateProfit(naver, coupang, offline);
-  const handmadeRanking = calculateHandmadeRanking(naver, coupang, offline);
+  // 플랫폼 데이터가 변경되면 이익·요약·랭킹 재계산
+  const naverWithProfit: NaverData = {
+    ...naver,
+    profit: calcOnlineProfit(naver.revenue, naver.fees),
+  };
+  const coupangWithProfit: CoupangData = {
+    ...coupang,
+    profit: calcOnlineProfit(coupang.revenue, coupang.fees),
+  };
+  const offlineWithProfit: OfflineData = {
+    ...offline,
+    profit: calcOfflineProfit(offline.revenue, offline.fees),
+  };
+
+  const summary = calcOverallSummary(
+    naverWithProfit,
+    coupangWithProfit,
+    offlineWithProfit
+  );
+  const naverRanking = calcPlatformRanking(naverWithProfit.products, 3);
+  const coupangRanking = calcPlatformRanking(coupangWithProfit.products, 3);
+  const offlineRanking = calcPlatformRanking(offlineWithProfit.products, 3);
+  const overallRanking = calcOverallRanking(
+    naverWithProfit.products,
+    coupangWithProfit.products,
+    offlineWithProfit.products,
+    null,
+    5
+  );
+  const productMatrix = calcProductMatrix(
+    naverWithProfit.products,
+    coupangWithProfit.products,
+    offlineWithProfit.products,
+    null
+  );
 
   const updated: MonthlyReport = {
     ...existing,
-    naver,
-    coupang,
-    offline,
-    profit,
-    handmadeRanking,
+    naver: naverWithProfit,
+    coupang: coupangWithProfit,
+    offline: offlineWithProfit,
+    summary,
+    naverRanking,
+    coupangRanking,
+    offlineRanking,
+    overallRanking,
+    productMatrix,
     insights: updates.insights ?? existing.insights,
     lastModifiedAt: new Date().toISOString(),
   };
@@ -116,7 +156,7 @@ export async function listReports(): Promise<
     );
 }
 
-// ─── 유틸 ────────────────────────────────────────────────────────────────────
+// ─── 유틸 ──────────────────────────────────────────────────────────────────
 
 type DeepPartial<T> = T extends object
   ? { [K in keyof T]?: DeepPartial<T[K]> }

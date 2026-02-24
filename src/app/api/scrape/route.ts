@@ -29,8 +29,13 @@ export async function POST(request: NextRequest) {
     // 1) 스크레이핑
     const reportData = await collectMonthlyData(year, month);
 
-    // 2) AI 인사이트 생성
-    const insights = await generateSalesInsights(reportData);
+    // 2) AI 인사이트 생성 (API 키 없거나 실패해도 빈 배열로 저장)
+    let insights: Awaited<ReturnType<typeof generateSalesInsights>> = [];
+    try {
+      insights = await generateSalesInsights(reportData);
+    } catch (insightErr) {
+      console.warn("[scrape] 인사이트 생성 실패 (데이터는 저장됩니다):", insightErr);
+    }
 
     const report = { ...reportData, insights };
 

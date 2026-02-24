@@ -1,121 +1,246 @@
 import {
-  PlatformData,
+  NaverData,
+  CoupangData,
   OfflineData,
   PlatformFees,
-  ProfitSummary,
-  HandmadeRankEntry,
+  PlatformProfit,
+  OverallSummary,
+  ProductRankEntry,
+  ProductMatrixRow,
+  ProductSales,
   Platform,
+  ProductCategory,
+  ProductMappingConfig,
 } from "@/lib/types";
 
-/** 재료비율: 판매가의 15% */
-export const MATERIAL_COST_RATE = 0.15;
+// ─── 상수 ─────────────────────────────────────────────────────────────────
+/** 온라인 부자재비율: (매출 - 물류비) × 15% */
+export const ONLINE_MATERIAL_RATE = 0.15;
+/** 오프라인 부자재비율: 매출 × 20% */
+export const OFFLINE_MATERIAL_RATE = 0.2;
+/** 네이버 기본 배송비 단가 */
+export const NAVER_SHIPPING_UNIT = 3_000;
 
-/** 플랫폼 수수료 항목 합계 (정산금 제외, 실제 비용만) */
-export function sumFees(fees: PlatformFees): number {
-  return (
-    fees.logisticsFee + fees.commissionFee + fees.shippingFee + fees.adFee
+// ─── 플랫폼별 이익 계산 ────────────────────────────────────────────────────
+
+/**
+ * 온라인 플랫폼 이익 계산 (네이버 / 쿠팡)
+ * - 이익 = 매출 - 수수료 - 물류비 - 광고비
+ * - 부자재비 = (매출 - 물류비) × 15%
+ * - 순이익 = 이익 - 부자재비
+ */
+export function calcOnlineProfit(
+  revenue: number,
+  fees: PlatformFees
+): PlatformProfit {
+  const profit =
+    revenue - fees.commissionFee - fees.logisticsFee - fees.adFee;
+  const materialCost = Math.round(
+    (revenue - fees.logisticsFee) * ONLINE_MATERIAL_RATE
   );
+  const netProfit = profit - materialCost;
+  return { profit, materialCost, netProfit };
 }
 
 /**
- * 최종 매출·이익·순이익 계산
- *
- * - 최종 매출 = 네이버 + 쿠팡 + 오프라인 매출
- * - 재료비    = 최종 매출 × 15%
- * - 플랫폼비용 = 네이버(물류+수수료+배송+광고) + 쿠팡(물류+수수료+배송+광고) + 오프라인(물류+배송)
- * - 최종 이익 = 최종 매출 - 플랫폼비용
- * - 순이익    = 최종 이익 - 재료비
+ * 오프라인 플랫폼 이익 계산 (고산의낮)
+ * - 이익 = 매출 - 수수료 - 물류비 - 광고비
+ * - 부자재비 = 매출 × 20%
+ * - 순이익 = 이익 - 부자재비
  */
-export function calculateProfit(
-  naver: PlatformData,
-  coupang: PlatformData,
-  offline: OfflineData
-): ProfitSummary {
-  const totalRevenue = naver.revenue + coupang.revenue + offline.revenue;
-  const materialCost = Math.round(totalRevenue * MATERIAL_COST_RATE);
-
-  const platformFees =
-    sumFees(naver.fees) +
-    sumFees(coupang.fees) +
-    offline.fees.logisticsFee +
-    offline.fees.shippingFee;
-
-  const grossProfit = totalRevenue - platformFees;
-  const netProfit = grossProfit - materialCost;
-
-  return { totalRevenue, materialCost, platformFees, grossProfit, netProfit };
+export function calcOfflineProfit(
+  revenue: number,
+  fees: PlatformFees
+): PlatformProfit {
+  const profit =
+    revenue - fees.commissionFee - fees.logisticsFee - fees.adFee;
+  const materialCost = Math.round(revenue * OFFLINE_MATERIAL_RATE);
+  const netProfit = profit - materialCost;
+  return { profit, materialCost, netProfit };
 }
 
-/**
- * 끈갈피(handmade) 상품 판매량 TOP 5 랭킹 계산
- *
- * 동일 상품명을 기준으로 네이버·쿠팡·오프라인 판매량을 합산해 정렬.
- * 상품명이 완전히 같아야 동일 상품으로 인식 (대소문자 구분 없음).
- */
-export function calculateHandmadeRanking(
-  naver: PlatformData,
-  coupang: PlatformData,
+// ─── 전체 요약 계산 ────────────────────────────────────────────────────────
+
+export function calcOverallSummary(
+  naver: NaverData,
+  coupang: CoupangData,
   offline: OfflineData
-): HandmadeRankEntry[] {
-  const allHandmade = [
-    ...naver.products.filter((p) => p.category === "handmade"),
-    ...coupang.products.filter((p) => p.category === "handmade"),
-    ...offline.products.filter((p) => p.category === "handmade"),
-  ];
+): OverallSummary {
+  return {
+    totalRevenue: naver.revenue + coupang.revenue + offline.revenue,
+    totalCommissionFee:
+      naver.fees.commissionFee +
+      coupang.fees.commissionFee +
+      offline.fees.commissionFee,
+    totalLogisticsFee:
+      naver.fees.logisticsFee +
+      coupang.fees.logisticsFee +
+      offline.fees.logisticsFee,
+    totalAdFee:
+      naver.fees.adFee + coupang.fees.adFee + offline.fees.adFee,
+    totalProfit:
+      naver.profit.profit +
+      coupang.profit.profit +
+      offline.profit.profit,
+    totalMaterialCost:
+      naver.profit.materialCost +
+      coupang.profit.materialCost +
+      offline.profit.materialCost,
+    totalNetProfit:
+      naver.profit.netProfit +
+      coupang.profit.netProfit +
+      offline.profit.netProfit,
+    totalQuantity:
+      naver.totalQuantity + coupang.totalQuantity + offline.totalQuantity,
+    handmadeQuantity:
+      naver.handmadeQuantity +
+      coupang.handmadeQuantity +
+      offline.handmadeQuantity,
+    otherQuantity:
+      naver.otherQuantity + coupang.otherQuantity + offline.otherQuantity,
+  };
+}
 
-  // 상품명(소문자) 기준으로 플랫폼별 집계
-  const productMap = new Map<
-    string,
-    {
-      productName: string;
-      totalQuantity: number;
-      totalRevenue: number;
-      byPlatform: Map<Platform, { quantity: number; revenue: number }>;
-    }
-  >();
+// ─── 랭킹 계산 ────────────────────────────────────────────────────────────
 
-  for (const product of allHandmade) {
-    const key = product.productName.toLowerCase().trim();
+/** 단일 플랫폼 상품 목록에서 TOP N 랭킹 생성 */
+export function calcPlatformRanking(
+  products: ProductSales[],
+  topN: number
+): ProductRankEntry[] {
+  const platform = products[0]?.platform;
+  const map = new Map<string, number>();
 
-    if (!productMap.has(key)) {
-      productMap.set(key, {
-        productName: product.productName,
-        totalQuantity: 0,
-        totalRevenue: 0,
-        byPlatform: new Map(),
-      });
-    }
-
-    const entry = productMap.get(key)!;
-    entry.totalQuantity += product.quantity;
-    entry.totalRevenue += product.revenue;
-
-    const existing = entry.byPlatform.get(product.platform);
-    if (existing) {
-      existing.quantity += product.quantity;
-      existing.revenue += product.revenue;
-    } else {
-      entry.byPlatform.set(product.platform, {
-        quantity: product.quantity,
-        revenue: product.revenue,
-      });
-    }
+  for (const p of products) {
+    map.set(p.productName, (map.get(p.productName) ?? 0) + p.quantity);
   }
 
-  return Array.from(productMap.values())
-    .sort((a, b) => b.totalQuantity - a.totalQuantity)
-    .slice(0, 5)
-    .map((entry, idx) => ({
-      rank: idx + 1,
-      productName: entry.productName,
-      totalQuantity: entry.totalQuantity,
-      totalRevenue: entry.totalRevenue,
-      byPlatform: Array.from(entry.byPlatform.entries()).map(
-        ([platform, data]) => ({
-          platform,
-          quantity: data.quantity,
-          revenue: data.revenue,
-        })
-      ),
-    }));
+  return Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([name, qty], idx) => {
+      const category =
+        products.find((p) => p.productName === name)?.category ?? "other";
+      return {
+        rank: idx + 1,
+        productName: name,
+        category,
+        total: qty,
+        naver: platform === "naver" ? qty : 0,
+        coupang: platform === "coupang" ? qty : 0,
+        offline: platform === "offline" ? qty : 0,
+      };
+    });
 }
+
+/**
+ * 전체 통합 TOP N 랭킹 계산
+ * 상품 매핑이 있으면 canonical명 기준으로 합산, 없으면 상품명 그대로 사용
+ */
+export function calcOverallRanking(
+  naver: ProductSales[],
+  coupang: ProductSales[],
+  offline: ProductSales[],
+  mapping: ProductMappingConfig | null,
+  topN: number
+): ProductRankEntry[] {
+  // canonical명 결정 함수
+  const toCanonical = (name: string, platform: Platform): string => {
+    if (!mapping) return name;
+    const m = mapping.mappings.find((m) =>
+      platform === "naver"
+        ? m.naver === name
+        : platform === "coupang"
+        ? m.coupang === name
+        : m.canonical === name
+    );
+    return m?.canonical ?? name;
+  };
+
+  const map = new Map<
+    string,
+    { category: ProductCategory; naver: number; coupang: number; offline: number }
+  >();
+
+  const add = (products: ProductSales[], platform: Platform) => {
+    for (const p of products) {
+      const key = toCanonical(p.productName, platform);
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
+      }
+      const entry = map.get(key)!;
+      entry[platform] += p.quantity;
+    }
+  };
+
+  add(naver, "naver");
+  add(coupang, "coupang");
+  add(offline, "offline");
+
+  return Array.from(map.entries())
+    .map(([name, v]) => ({
+      rank: 0,
+      productName: name,
+      category: v.category,
+      total: v.naver + v.coupang + v.offline,
+      naver: v.naver,
+      coupang: v.coupang,
+      offline: v.offline,
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, topN)
+    .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+}
+
+// ─── 상품 × 플랫폼 매트릭스 ───────────────────────────────────────────────
+
+export function calcProductMatrix(
+  naver: ProductSales[],
+  coupang: ProductSales[],
+  offline: ProductSales[],
+  mapping: ProductMappingConfig | null
+): ProductMatrixRow[] {
+  const toCanonical = (name: string, platform: Platform): string => {
+    if (!mapping) return name;
+    const m = mapping.mappings.find((m) =>
+      platform === "naver"
+        ? m.naver === name
+        : platform === "coupang"
+        ? m.coupang === name
+        : m.canonical === name
+    );
+    return m?.canonical ?? name;
+  };
+
+  const map = new Map<
+    string,
+    { category: ProductCategory; naver: number; coupang: number; offline: number }
+  >();
+
+  const add = (products: ProductSales[], platform: Platform) => {
+    for (const p of products) {
+      const key = toCanonical(p.productName, platform);
+      if (!map.has(key)) {
+        map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
+      }
+      map.get(key)![platform] += p.quantity;
+    }
+  };
+
+  add(naver, "naver");
+  add(coupang, "coupang");
+  add(offline, "offline");
+
+  return Array.from(map.entries())
+    .map(([name, v]) => ({
+      productName: name,
+      category: v.category,
+      naver: v.naver,
+      coupang: v.coupang,
+      offline: v.offline,
+      total: v.naver + v.coupang + v.offline,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
