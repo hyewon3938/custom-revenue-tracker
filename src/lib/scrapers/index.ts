@@ -6,6 +6,7 @@ import {
   OfflineData,
   PlatformFees,
 } from "@/lib/types";
+import { pad } from "@/lib/utils/format";
 import { loginNaver } from "./naver-auth";
 import { loginCoupang } from "./coupang-auth";
 import { getValidSessionPath } from "./session-store";
@@ -83,7 +84,6 @@ export function getDateRange(
     today.getFullYear() === year && today.getMonth() + 1 === month;
 
   const lastDay = new Date(year, month, 0).getDate();
-  const pad = (n: number) => String(n).padStart(2, "0");
 
   const endDay = isCurrentMonth ? today.getDate() - 1 : lastDay;
 

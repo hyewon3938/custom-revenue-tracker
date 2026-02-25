@@ -10,49 +10,15 @@
 import fs from "fs/promises";
 import path from "path";
 import { ProductMappingConfig, ProductMapping } from "../src/lib/types";
+import {
+  extractKeywords,
+  jaccardSimilarity,
+  cleanProductName,
+} from "../src/lib/calculations/product";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const REPORTS_DIR = path.join(DATA_DIR, "reports");
 const OUTPUT_PATH = path.join(DATA_DIR, "product-mapping.json");
-
-// ─── 불용어: 제품명 비교 시 무시할 단어 ──────────────────────────────────
-const STOP_WORDS = new Set([
-  // 공통 제품 유형
-  "끈갈피", "책갈피", "비즈", "북마크", "끈", "북클립",
-  // 판매 목적어
-  "선물", "독서모임", "책선물", "독서템", "독서용품", "독서",
-  // 키워드성 수식어
-  "리커밋", "맞춤제작",
-  // 기타 노이즈
-  "handmade", "-", "·", "—", "비즈책갈피", "비즈끈갈피",
-  "과일", "모음",
-]);
-
-/** 상품명 → 비교용 키워드 집합 */
-function toKeywords(name: string): Set<string> {
-  // [리커밋] 같은 접두어, 특수문자, 괄호 내용 제거
-  const cleaned = name
-    .replace(/\[.*?\]/g, "")
-    .replace(/[^\uAC00-\uD7A3\u0041-\u007A\s]/g, " ") // 한글+영문만
-    .toLowerCase()
-    .trim();
-
-  const words = cleaned.split(/\s+/).filter((w) => w.length > 0);
-  return new Set(words.filter((w) => !STOP_WORDS.has(w)));
-}
-
-/** Jaccard 유사도 (0~1) */
-function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 && b.size === 0) return 1;
-  const intersection = new Set([...a].filter((x) => b.has(x)));
-  const union = new Set([...a, ...b]);
-  return intersection.size / union.size;
-}
-
-/** 상품명에서 [리커밋] 등 접두어를 제거한 정제 이름 */
-function cleanName(name: string): string {
-  return name.replace(/\[.*?\]\s*/g, "").trim();
-}
 
 async function main() {
   // ── 레포트 전체 로드 ─────────────────────────────────────────────────
@@ -84,13 +50,13 @@ async function main() {
   const matchedCoupang = new Set<string>(); // 이미 매칭된 쿠팡 상품명
 
   for (const naverName of naverNames) {
-    const naverKw = toKeywords(naverName);
+    const naverKw = extractKeywords(naverName);
     let bestScore = 0;
     let bestCoupang: string | null = null;
 
     for (const coupangName of coupangNames) {
       if (matchedCoupang.has(coupangName)) continue;
-      const score = jaccardSimilarity(naverKw, toKeywords(coupangName));
+      const score = jaccardSimilarity(naverKw, extractKeywords(coupangName));
       if (score > bestScore) {
         bestScore = score;
         bestCoupang = coupangName;
@@ -100,7 +66,7 @@ async function main() {
     if (bestCoupang && bestScore >= SIMILARITY_THRESHOLD) {
       // 쿠팡명 기반으로 canonical 초안 생성 (접두어 제거)
       mappings.push({
-        canonical: cleanName(bestCoupang),
+        canonical: cleanProductName(bestCoupang),
         naver: naverName,
         coupang: bestCoupang,
       });
@@ -108,7 +74,7 @@ async function main() {
     } else {
       // 쿠팡 매칭 없음 → 네이버 단독
       mappings.push({
-        canonical: cleanName(naverName),
+        canonical: cleanProductName(naverName),
         naver: naverName,
       });
     }
@@ -118,7 +84,7 @@ async function main() {
   for (const coupangName of coupangNames) {
     if (!matchedCoupang.has(coupangName)) {
       mappings.push({
-        canonical: cleanName(coupangName),
+        canonical: cleanProductName(coupangName),
         coupang: coupangName,
       });
     }

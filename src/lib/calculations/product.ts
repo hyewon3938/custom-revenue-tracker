@@ -34,30 +34,44 @@ export function reclassifyAndSummarize(products: ProductSales[]) {
   };
 }
 
-// ─── 상품명 → canonical 해석 ────────────────────────────────────────────────
+// ─── 상품명 키워드 유틸 (mapping-store, generate-mapping 공유) ──────────────
 
-const PRODUCT_STOP_WORDS = new Set([
+/** 상품명 비교 시 무시할 불용어 */
+export const STOP_WORDS = new Set([
+  // 공통 제품 유형
   "끈갈피", "책갈피", "비즈", "북마크", "끈", "북클립",
+  // 판매 목적어
   "선물", "독서모임", "책선물", "독서템", "독서용품", "독서",
-  "리커밋", "맞춤제작", "handmade",
+  // 키워드성 수식어
+  "리커밋", "맞춤제작",
+  // 기타 노이즈
+  "handmade", "-", "·", "—", "비즈책갈피", "비즈끈갈피",
+  "과일", "모음",
 ]);
 
-function extractKeywords(name: string): Set<string> {
+/** 상품명 → 비교용 키워드 집합 (불용어·특수문자 제거) */
+export function extractKeywords(name: string): Set<string> {
   const cleaned = name
     .replace(/\[.*?\]/g, "")
     .replace(/[^\uAC00-\uD7A3a-zA-Z\s]/g, " ")
     .toLowerCase()
     .trim();
   return new Set(
-    cleaned.split(/\s+/).filter((w) => w.length > 0 && !PRODUCT_STOP_WORDS.has(w))
+    cleaned.split(/\s+/).filter((w) => w.length > 0 && !STOP_WORDS.has(w))
   );
 }
 
-function keywordOverlap(a: Set<string>, b: Set<string>): number {
+/** Jaccard 유사도 (0~1) */
+export function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
   if (a.size === 0 && b.size === 0) return 1;
   const intersection = [...a].filter((x) => b.has(x)).length;
   const union = new Set([...a, ...b]).size;
   return intersection / union;
+}
+
+/** 상품명에서 [리커밋] 등 접두어를 제거한 정제 이름 */
+export function cleanProductName(name: string): string {
+  return name.replace(/\[.*?\]\s*/g, "").trim();
 }
 
 /**
@@ -94,7 +108,7 @@ export function toCanonical(
     let bestScore = 0;
     let bestCanonical = name;
     for (const m of mapping.mappings) {
-      const score = keywordOverlap(kw, extractKeywords(m.canonical));
+      const score = jaccardSimilarity(kw, extractKeywords(m.canonical));
       if (score > bestScore) {
         bestScore = score;
         bestCanonical = m.canonical;

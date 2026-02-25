@@ -2,6 +2,7 @@ import { Page, Frame } from "playwright";
 import { NAVER_URLS, getFrameByUrl } from "./naver-auth";
 import { setDateRangeWithCalendar } from "./naver-datepicker";
 import { goToNextPageInGrid } from "./naver-utils";
+import { pad } from "@/lib/utils/format";
 
 export interface NaverSettlementResult {
   settlementAmount: number; // 정산금액 합계
@@ -49,7 +50,6 @@ async function waitForMonthDataLoaded(
   year: number,
   month: number
 ): Promise<void> {
-  const pad = (n: number) => String(n).padStart(2, "0");
   const p1 = `${year}.${pad(month)}`; // "2026.01"
   const p2 = `${year}-${pad(month)}`; // "2026-01"
   await frame.waitForFunction(

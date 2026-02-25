@@ -18,7 +18,7 @@ import {
 import { reclassifyAndSummarize } from "@/lib/calculations/product";
 import { rebuildDerivedFields } from "@/lib/calculations/ranking";
 import { deepMerge } from "@/lib/utils/deep-merge";
-import { getPrevMonth } from "@/lib/utils/format";
+import { pad, getPrevMonth } from "@/lib/utils/format";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
 
@@ -29,10 +29,6 @@ function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const next = prev.then(fn, fn);
   writeLocks.set(key, next.then(() => {}, () => {}));
   return next;
-}
-
-function pad(n: number) {
-  return String(n).padStart(2, "0");
 }
 
 function getReportPath(year: number, month: number): string {
