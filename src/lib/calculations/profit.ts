@@ -4,6 +4,7 @@ import {
   OfflineData,
   PlatformFees,
   PlatformProfit,
+  ShippingStats,
   OverallSummary,
   ProductRankEntry,
   ProductMatrixRow,
@@ -14,7 +15,7 @@ import {
   SponsoredItem,
 } from "@/lib/types";
 
-// ─── 환경변수에서 비율 로드 ────────────────────────────────────────────────
+// ─── 환경변수 유틸 ──────────────────────────────────────────────────────────
 
 function getRate(key: string): number {
   const val = process.env[key];
@@ -24,51 +25,81 @@ function getRate(key: string): number {
   return n;
 }
 
-// ─── 플랫폼별 이익 계산 ────────────────────────────────────────────────────
+function getEnvInt(key: string, fallback: number): number {
+  return parseInt(process.env[key] ?? "") || fallback;
+}
+
+// ─── 플랫폼 공통 이익 계산 ──────────────────────────────────────────────────
 
 /**
- * 온라인 플랫폼 이익 계산 (네이버 / 쿠팡)
- * - 이익 = 매출 - 수수료 - 물류비 - 광고비
- * - 부자재비 = (매출 - 물류비) × 환경변수 비율
- * - 순이익 = 이익 - 부자재비
+ * 통합 이익 계산 함수.
+ * 호출자가 플랫폼별 비즈니스 규칙에 따라 materialBase를 계산하여 전달.
+ *
+ * @param revenue      매출 (결제금액)
+ * @param fees         플랫폼 비용 내역
+ * @param materialBase 부자재비 계산 기준 금액 (플랫폼별 다름)
+ * @param rateKey      부자재비 비율 환경변수 키 (기본: ONLINE_MATERIAL_RATE)
  */
-export function calcOnlineProfit(
+export function calcPlatformProfit(
   revenue: number,
-  fees: PlatformFees
+  fees: PlatformFees,
+  materialBase: number,
+  rateKey: string = "ONLINE_MATERIAL_RATE"
 ): PlatformProfit {
   const profit =
     revenue - fees.commissionFee - fees.logisticsFee - fees.adFee;
-  const materialCost = Math.round(
-    (revenue - fees.logisticsFee) * getRate("ONLINE_MATERIAL_RATE")
-  );
+  const materialCost = Math.round(materialBase * getRate(rateKey));
   const netProfit = profit - materialCost;
   return { profit, materialCost, netProfit };
 }
 
+// ─── 네이버 배송 통계 계산 ──────────────────────────────────────────────────
+
 /**
- * 오프라인 플랫폼 이익 계산
- * - 이익 = 매출 - 수수료 - 물류비 - 광고비
- * - 부자재비:
- *   · 고산의낮(할인 납품): (매출 + 수수료) × 비율 — 수수료=할인분이므로 정가 기준
- *   · 기타 입점처(정가 판매): 매출 × 비율
- * - 순이익 = 이익 - 부자재비
+ * 고객 배송비 합계와 결제자수로 배송 건수 및 판매자 실배송비 계산.
+ * - regularCount = shippingCollected / NAVER_SHIPPING_FEE
+ * - freeCount = payerCount - regularCount
+ * - sellerCost = freeCount × COST + regularCount × (COST - FEE)
  */
-export function calcOfflineProfit(
+export function calcNaverShippingStats(
+  shippingCollected: number,
+  payerCount: number
+): ShippingStats {
+  const fee = getEnvInt("NAVER_SHIPPING_FEE", 3000);
+  const cost = getEnvInt("NAVER_SHIPPING_COST", 3200);
+
+  const regularCount = fee > 0 ? Math.round(shippingCollected / fee) : 0;
+  const freeCount = Math.max(0, payerCount - regularCount);
+  const sellerCost = freeCount * cost + regularCount * (cost - fee);
+
+  return { regularCount, freeCount, sellerCost };
+}
+
+// ─── materialBase 헬퍼 ──────────────────────────────────────────────────────
+
+/** 네이버: 순수 상품 매출 (고객 배송비 제외) */
+export function naverMaterialBase(
   revenue: number,
-  fees: PlatformFees,
-  venueId: string
-): PlatformProfit {
-  const profit =
-    revenue - fees.commissionFee - fees.logisticsFee - fees.adFee;
-  // 고산의낮: 할인 납품이라 부자재비는 정가(매출+할인분) 기준
-  // 기타 입점처: 정가 판매이므로 매출 기준
-  const materialBase =
-    venueId === "gosan" ? revenue + fees.commissionFee : revenue;
-  const materialCost = Math.round(
-    materialBase * getRate("OFFLINE_MATERIAL_RATE")
-  );
-  const netProfit = profit - materialCost;
-  return { profit, materialCost, netProfit };
+  shippingCollected: number
+): number {
+  return revenue - shippingCollected;
+}
+
+/** 쿠팡: 배송 마크업 제외한 정가 기준 매출 */
+export function coupangMaterialBase(
+  revenue: number,
+  totalQuantity: number
+): number {
+  const markup = getEnvInt("COUPANG_SHIPPING_MARKUP", 2000);
+  return revenue - totalQuantity * markup;
+}
+
+/** 고산의낮: 매출(할인가) + 할인분(수수료) = 정가 기준 */
+export function gosanMaterialBase(
+  revenue: number,
+  commissionFee: number
+): number {
+  return revenue + commissionFee;
 }
 
 // ─── 전체 요약 계산 ────────────────────────────────────────────────────────
