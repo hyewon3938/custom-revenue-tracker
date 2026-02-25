@@ -55,13 +55,16 @@ export default function InsightsSection({ insights, onRegenerate }: Props) {
           disabled={regenerating}
           className="text-sm text-brand-500 hover:text-brand-700 disabled:opacity-40 transition-colors"
         >
-          {regenerating ? "생성 중..." : "재생성"}
+          {regenerating ? "생성 중..." : insights.length === 0 ? "생성" : "재생성"}
         </button>
       </div>
 
       {insights.length === 0 ? (
-        <div className="bg-white rounded-xl border border-warm-200 py-12 text-center text-sm text-gray-400">
-          인사이트가 없습니다.
+        <div className="bg-white rounded-xl border border-warm-200 py-12 text-center">
+          <p className="text-sm text-gray-400">인사이트가 없습니다.</p>
+          <p className="text-xs text-gray-300 mt-1">
+            수기 데이터 입력 완료 후 &ldquo;생성&rdquo; 버튼을 눌러주세요.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">

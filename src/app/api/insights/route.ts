@@ -1,15 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateSalesInsights } from "@/lib/ai/insights";
-import { loadReport, updateReport } from "@/lib/storage/report-store";
+import { loadReport, loadRecentHistory, updateReport } from "@/lib/storage/report-store";
 
 /**
  * POST /api/insights
  *
  * 저장된 레포트의 AI 인사이트를 (재)생성하고 파일에 저장합니다.
+ * ENABLE_AI_INSIGHTS=true 환경변수가 설정되어 있어야 동작합니다.
+ * 최대 3개월 히스토리를 함께 전달하여 추이 분석 및 협찬 지연 효과를 포함합니다.
+ *
  * body: { year: number, month: number }
  */
 export async function POST(request: NextRequest) {
   try {
+    // 활성화 플래그 체크
+    if (process.env.ENABLE_AI_INSIGHTS !== "true") {
+      return NextResponse.json(
+        { error: "AI 인사이트가 비활성화되어 있습니다. .env.local에 ENABLE_AI_INSIGHTS=true를 추가하세요." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { year, month } = body;
 
@@ -28,13 +39,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const insights = await generateSalesInsights(report);
+    // 최대 3개월 히스토리 로드 [전달, 전전달, 전전전달]
+    const history = await loadRecentHistory(year, month, 3);
+
+    const insights = await generateSalesInsights(report, history);
     const updated = await updateReport(year, month, { insights });
 
     return NextResponse.json({ insights: updated.insights });
   } catch (error) {
     const message = error instanceof Error ? error.message : "인사이트 생성 실패";
-    console.error("[POST /api/insights]", error);
+    console.error("[POST /api/insights] 인사이트 생성 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -142,10 +142,21 @@ export interface ProductMappingConfig {
 }
 
 // ─── Claude AI 인사이트 ───────────────────────────────────────────────────
+
+export type InsightCategory =
+  | "revenue"       // 매출 동향
+  | "profit"        // 이익률/비용 구조
+  | "product"       // 상품 전략
+  | "platform"      // 플랫폼 비교
+  | "ad"            // 광고 효율
+  | "sponsorship"   // 협찬 마케팅 효과
+  | "trend";        // 전달 대비 추세
+
 export interface SalesInsight {
   title: string;
   description: string;
   type: "positive" | "negative" | "neutral" | "action";
+  category?: InsightCategory;
 }
 
 // ─── 인사이트 뷰용 집계 타입 ───────────────────────────────────────────────
