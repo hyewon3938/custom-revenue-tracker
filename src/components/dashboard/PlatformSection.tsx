@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 import {
   NaverData,
   CoupangData,
@@ -8,13 +9,13 @@ import {
   ProductMatrixRow,
   ProductSales,
 } from "@/lib/types";
-import { formatKRW as krw } from "@/lib/utils/format";
+import KRWText from "@/components/ui/KRWText";
 import EditableField from "./EditableField";
 import ProductQtyEditor from "./ProductQtyEditor";
 
 // ─── 공통 Row 컴포넌트 ─────────────────────────────────────────────────────
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex justify-between items-center py-1.5 border-b border-warm-100 last:border-0">
       <span className="text-sm text-gray-500">{label}</span>
@@ -33,7 +34,7 @@ function EditRow({
   onSave: (v: number) => Promise<void>;
 }) {
   return (
-    <div className="flex justify-between items-center py-1.5 border-b border-warm-100 last:border-0">
+    <div className="flex justify-between items-center py-1.5">
       <span className="text-sm text-gray-500">
         {label} <span className="text-xs text-brand-400">(수기)</span>
       </span>
@@ -47,7 +48,7 @@ function NetProfitRow({ value }: { value: number }) {
     <div className="flex justify-between items-center pt-2">
       <span className="text-sm font-semibold text-gray-700">순이익</span>
       <span className={`text-sm font-bold ${value >= 0 ? "text-brand-500" : "text-red-500"}`}>
-        {krw(value)}
+        <KRWText n={value} />
       </span>
     </div>
   );
@@ -69,10 +70,10 @@ function NaverCard({
         <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">N</span>
       </div>
 
-      <Row label="매출" value={krw(data.revenue)} />
-      <Row label="정산금" value={krw(data.fees.settlementAmount)} />
-      <Row label="수수료" value={krw(data.fees.commissionFee)} />
-      <Row label="물류비" value={krw(data.fees.logisticsFee)} />
+      <Row label="매출" value={<KRWText n={data.revenue} />} />
+      <Row label="정산금" value={<KRWText n={data.fees.settlementAmount} />} />
+      <Row label="수수료" value={<KRWText n={data.fees.commissionFee} />} />
+      <Row label="물류비" value={<KRWText n={data.fees.logisticsFee} />} />
       <EditRow
         label="광고비"
         value={data.fees.adFee}
@@ -80,8 +81,8 @@ function NaverCard({
       />
 
       <div className="mt-3 pt-3 border-t border-warm-100">
-        <Row label="이익" value={krw(data.profit.profit)} />
-        <Row label="부자재비" value={krw(data.profit.materialCost)} />
+        <Row label="이익" value={<KRWText n={data.profit.profit} />} />
+        <Row label="부자재비" value={<KRWText n={data.profit.materialCost} />} />
         <NetProfitRow value={data.profit.netProfit} />
       </div>
 
@@ -168,14 +169,14 @@ function CoupangCard({
         </div>
       </div>
 
-      <Row label="매출" value={krw(data.revenue)} />
-      <Row label="판매수수료" value={krw(data.fees.commissionFee)} />
-      <Row label="풀필먼트 물류비" value={krw(data.fees.logisticsFee)} />
-      <Row label="광고비" value={krw(data.fees.adFee)} />
+      <Row label="매출" value={<KRWText n={data.revenue} />} />
+      <Row label="판매수수료" value={<KRWText n={data.fees.commissionFee} />} />
+      <Row label="풀필먼트 물류비" value={<KRWText n={data.fees.logisticsFee} />} />
+      <Row label="광고비" value={<KRWText n={data.fees.adFee} />} />
 
       <div className="mt-3 pt-3 border-t border-warm-100">
-        <Row label="이익" value={krw(data.profit.profit)} />
-        <Row label="부자재비" value={krw(data.profit.materialCost)} />
+        <Row label="이익" value={<KRWText n={data.profit.profit} />} />
+        <Row label="부자재비" value={<KRWText n={data.profit.materialCost} />} />
         <NetProfitRow value={data.profit.netProfit} />
       </div>
 
@@ -240,8 +241,8 @@ function OfflineCard({
       <EditRow label="광고비" value={data.fees.adFee} onSave={(v) => onUpdate({ offline: { fees: { adFee: v } } })} />
 
       <div className="mt-3 pt-3 border-t border-warm-100">
-        <Row label="이익" value={krw(data.profit.profit)} />
-        <Row label="부자재비" value={krw(data.profit.materialCost)} />
+        <Row label="이익" value={<KRWText n={data.profit.profit} />} />
+        <Row label="부자재비" value={<KRWText n={data.profit.materialCost} />} />
         <NetProfitRow value={data.profit.netProfit} />
       </div>
 

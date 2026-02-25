@@ -1,3 +1,3 @@
-/** 원화 표시 (예: ₩1,234,567) */
+/** 원화 표시 — 순수 문자열 (차트 툴팁, 버튼 레이블 등 JSX 불가 영역에서 사용) */
 export const formatKRW = (n: number): string =>
-  n.toLocaleString("ko-KR", { style: "currency", currency: "KRW" });
+  n.toLocaleString("ko-KR") + " 원";

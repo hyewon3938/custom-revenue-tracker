@@ -2,7 +2,6 @@
 
 import { useCallback } from "react";
 import { SponsorshipData, SponsoredItem, ProductMatrixRow } from "@/lib/types";
-import { formatKRW as krw } from "@/lib/utils/format";
 import EditableField from "./EditableField";
 import ProductQtyEditor from "./ProductQtyEditor";
 
@@ -18,7 +17,7 @@ function EditRow({
   onSave: (v: number) => Promise<void>;
 }) {
   return (
-    <div className="flex justify-between items-center py-1.5 border-b border-warm-100 last:border-0">
+    <div className="flex justify-between items-center py-1.5">
       <span className="text-sm text-gray-500">
         {label} <span className="text-xs text-brand-400">(수기)</span>
       </span>
@@ -70,7 +69,7 @@ export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }
 
         {sponsorship.marketingCost > 0 && (
           <p className="text-xs text-gray-400 mt-1 mb-2">
-            순이익에서 {krw(sponsorship.marketingCost)} 차감됩니다.
+            순이익에서 {sponsorship.marketingCost.toLocaleString("ko-KR")}원 차감됩니다.
           </p>
         )}
 

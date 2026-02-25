@@ -1,45 +1,15 @@
 import { OverallSummary } from "@/lib/types";
-import { formatKRW as krw } from "@/lib/utils/format";
-
-function StatCard({
-  label,
-  value,
-  sub,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-xl border p-5 ${
-        highlight
-          ? "bg-brand-500 border-brand-600 text-white"
-          : "bg-white border-warm-200"
-      }`}
-    >
-      <p className={`text-sm ${highlight ? "text-brand-100" : "text-gray-500"}`}>
-        {label}
-      </p>
-      <p className={`text-2xl font-bold mt-1 ${highlight ? "text-white" : "text-gray-900"}`}>
-        {value}
-      </p>
-      {sub && (
-        <p className={`text-xs mt-1 ${highlight ? "text-brand-200" : "text-gray-400"}`}>
-          {sub}
-        </p>
-      )}
-    </div>
-  );
-}
+import StatCard from "@/components/ui/StatCard";
+import KRWText from "@/components/ui/KRWText";
+import QtyText from "@/components/ui/QtyText";
 
 function CostRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex justify-between items-center py-1.5 border-b border-warm-100 last:border-0">
       <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-semibold text-gray-700">{krw(value)}</span>
+      <span className="text-sm font-semibold text-gray-700">
+        <KRWText n={value} />
+      </span>
     </div>
   );
 }
@@ -60,12 +30,12 @@ export default function OverallSummarySection({
 
       {/* 핵심 지표 4개 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <StatCard label="총 매출" value={krw(summary.totalRevenue)} />
-        <StatCard label="총 이익" value={krw(summary.totalProfit)} />
-        <StatCard label="부자재비" value={krw(summary.totalMaterialCost)} />
+        <StatCard label="총 매출" value={<KRWText n={summary.totalRevenue} />} />
+        <StatCard label="총 이익" value={<KRWText n={summary.totalProfit} />} />
+        <StatCard label="부자재비" value={<KRWText n={summary.totalMaterialCost} />} />
         <StatCard
           label="순이익"
-          value={krw(summary.totalNetProfit)}
+          value={<KRWText n={summary.totalNetProfit} />}
           sub={`마진율 ${marginRate}%`}
           highlight
         />
@@ -84,35 +54,37 @@ export default function OverallSummarySection({
           <div className="flex justify-between items-center pt-2 mt-1">
             <span className="text-sm font-semibold text-gray-700">합계</span>
             <span className="text-sm font-bold text-gray-900">
-              {krw(
-                summary.totalCommissionFee +
+              <KRWText
+                n={
+                  summary.totalCommissionFee +
                   summary.totalLogisticsFee +
                   summary.totalAdFee +
                   (summary.marketingCost ?? 0)
-              )}
+                }
+              />
             </span>
           </div>
         </div>
 
         <div className="bg-white rounded-xl border border-warm-200 p-5">
           <p className="text-sm font-medium text-gray-700 mb-3">판매량</p>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
+          <div>
+            <div className="flex justify-between items-center py-1.5 border-b border-warm-100">
               <span className="text-sm text-gray-500">전체</span>
               <span className="text-sm font-bold text-gray-900">
-                {summary.totalQuantity.toLocaleString()}개
+                <QtyText n={summary.totalQuantity} />
               </span>
             </div>
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center py-1.5 border-b border-warm-100">
               <span className="text-sm text-gray-500">끈갈피</span>
               <span className="text-sm font-semibold">
-                {summary.handmadeQuantity.toLocaleString()}개
+                <QtyText n={summary.handmadeQuantity} />
               </span>
             </div>
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center py-1.5">
               <span className="text-sm text-gray-500">기타</span>
               <span className="text-sm font-semibold">
-                {summary.otherQuantity.toLocaleString()}개
+                <QtyText n={summary.otherQuantity} />
               </span>
             </div>
           </div>

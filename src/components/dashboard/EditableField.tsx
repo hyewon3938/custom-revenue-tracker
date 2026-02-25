@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 
 const formatKRW = (n: number) =>
-  n.toLocaleString("ko-KR", { style: "currency", currency: "KRW" });
+  n.toLocaleString("ko-KR") + " 원";
 
 interface Props {
   value: number;
