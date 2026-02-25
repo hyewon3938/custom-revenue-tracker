@@ -107,6 +107,7 @@ interface Props {
   naverRanking: ProductRankEntry[];
   coupangRanking: ProductRankEntry[];
   offlineRanking: ProductRankEntry[];
+  sponsorExcludedRanking?: ProductRankEntry[];
 }
 
 export default function RankingSection({
@@ -114,12 +115,20 @@ export default function RankingSection({
   naverRanking,
   coupangRanking,
   offlineRanking,
+  sponsorExcludedRanking,
 }: Props) {
   return (
     <section>
       <h3 className="text-lg font-semibold text-gray-800 mb-3">상품 랭킹</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <RankTable title="전체 TOP 5" entries={overallRanking} showColumns />
+        {/* 전체 + 협찬 제외 (좌측 컬럼) */}
+        <div className="space-y-4">
+          <RankTable title="전체 TOP 5" entries={overallRanking} showColumns />
+          {sponsorExcludedRanking && sponsorExcludedRanking.length > 0 && (
+            <RankTable title="협찬 제외 TOP 5" entries={sponsorExcludedRanking} showColumns />
+          )}
+        </div>
+        {/* 플랫폼별 (우측 컬럼) */}
         <div className="space-y-4">
           <RankTable title="네이버 TOP 3" entries={naverRanking} />
           <RankTable title="쿠팡 TOP 3" entries={coupangRanking} />

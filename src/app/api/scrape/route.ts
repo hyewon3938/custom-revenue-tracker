@@ -9,6 +9,7 @@ import {
   calcPlatformRanking,
   calcOverallRanking,
   calcProductMatrix,
+  calcSponsorExcludedRanking,
 } from "@/lib/calculations/profit";
 import { loadProductMapping } from "@/lib/storage/mapping-store";
 
@@ -44,13 +45,20 @@ export async function POST(request: NextRequest) {
     // 2) 재수집인 경우 수기 입력 데이터 보존 후 파생 필드 재계산
     //    - offline: 전체 (매출·비용·상품별 수량 모두 수기 입력)
     //    - naver.fees.adFee: 수기 입력
+    //    - sponsorship: 협찬 마케팅 데이터 (수기 입력)
     const existing = await loadReport(year, month);
     if (existing) {
       reportData.offline = existing.offline;
       reportData.naver.fees.adFee = existing.naver.fees.adFee;
+      reportData.sponsorship = existing.sponsorship ?? {
+        items: [],
+        marketingCost: 0,
+        totalQuantity: 0,
+        handmadeQuantity: 0,
+      };
 
       // 보존된 데이터로 파생 필드 재계산
-      // (collectMonthlyData는 offline=빈값·adFee=0 기준으로 계산했으므로)
+      // (collectMonthlyData는 offline=빈값·adFee=0·sponsorship=빈값 기준으로 계산했으므로)
       reportData.naver.profit = calcOnlineProfit(
         reportData.naver.revenue,
         reportData.naver.fees
@@ -61,10 +69,12 @@ export async function POST(request: NextRequest) {
       );
 
       const mapping = await loadProductMapping();
+      const marketingCost = reportData.sponsorship.marketingCost;
       reportData.summary = calcOverallSummary(
         reportData.naver,
         reportData.coupang,
-        reportData.offline
+        reportData.offline,
+        marketingCost
       );
       reportData.offlineRanking = calcPlatformRanking(
         reportData.offline.products,
@@ -75,6 +85,14 @@ export async function POST(request: NextRequest) {
         reportData.naver.products,
         reportData.coupang.products,
         reportData.offline.products,
+        mapping,
+        5
+      );
+      reportData.sponsorExcludedRanking = calcSponsorExcludedRanking(
+        reportData.naver.products,
+        reportData.coupang.products,
+        reportData.offline.products,
+        reportData.sponsorship.items,
         mapping,
         5
       );

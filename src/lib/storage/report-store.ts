@@ -6,6 +6,7 @@ import {
   CoupangData,
   OfflineData,
   ProductSales,
+  SponsorshipData,
 } from "@/lib/types";
 import {
   calcOnlineProfit,
@@ -14,6 +15,7 @@ import {
   calcPlatformRanking,
   calcOverallRanking,
   calcProductMatrix,
+  calcSponsorExcludedRanking,
 } from "@/lib/calculations/profit";
 import { loadProductMapping } from "@/lib/storage/mapping-store";
 
@@ -59,6 +61,13 @@ export async function loadReport(
  * updates에 포함된 필드만 기존 레포트에 병합하고,
  * 플랫폼 데이터가 변경되면 profit·summary·ranking 자동 재계산.
  */
+const DEFAULT_SPONSORSHIP: SponsorshipData = {
+  items: [],
+  marketingCost: 0,
+  totalQuantity: 0,
+  handmadeQuantity: 0,
+};
+
 export async function updateReport(
   year: number,
   month: number,
@@ -66,6 +75,7 @@ export async function updateReport(
     naver?: DeepPartial<NaverData>;
     coupang?: DeepPartial<CoupangData>;
     offline?: DeepPartial<OfflineData>;
+    sponsorship?: DeepPartial<SponsorshipData>;
     insights?: MonthlyReport["insights"];
   }
 ): Promise<MonthlyReport> {
@@ -128,12 +138,31 @@ export async function updateReport(
     profit: calcOfflineProfit(offline.revenue, offline.fees),
   };
 
+  // 협찬 데이터 병합
+  const existingSponsorship: SponsorshipData = existing.sponsorship ?? DEFAULT_SPONSORSHIP;
+  const sponsorshipMerged = updates.sponsorship
+    ? deepMerge(existingSponsorship, updates.sponsorship)
+    : existingSponsorship;
+
+  // items가 교체됐으면 수량 합계 자동 재계산
+  const sponsorship: SponsorshipData =
+    updates.sponsorship?.items !== undefined
+      ? {
+          ...sponsorshipMerged,
+          totalQuantity: sponsorshipMerged.items.reduce((s, i) => s + i.quantity, 0),
+          handmadeQuantity: sponsorshipMerged.items
+            .filter((i) => i.category === "handmade")
+            .reduce((s, i) => s + i.quantity, 0),
+        }
+      : sponsorshipMerged;
+
   const mapping = await loadProductMapping();
 
   const summary = calcOverallSummary(
     naverWithProfit,
     coupangWithProfit,
-    offlineWithProfit
+    offlineWithProfit,
+    sponsorship.marketingCost
   );
   const naverRanking = calcPlatformRanking(naverWithProfit.products, 3, mapping);
   const coupangRanking = calcPlatformRanking(coupangWithProfit.products, 3, mapping);
@@ -142,6 +171,14 @@ export async function updateReport(
     naverWithProfit.products,
     coupangWithProfit.products,
     offlineWithProfit.products,
+    mapping,
+    5
+  );
+  const sponsorExcludedRanking = calcSponsorExcludedRanking(
+    naverWithProfit.products,
+    coupangWithProfit.products,
+    offlineWithProfit.products,
+    sponsorship.items,
     mapping,
     5
   );
@@ -157,11 +194,13 @@ export async function updateReport(
     naver: naverWithProfit,
     coupang: coupangWithProfit,
     offline: offlineWithProfit,
+    sponsorship,
     summary,
     naverRanking,
     coupangRanking,
     offlineRanking,
     overallRanking,
+    sponsorExcludedRanking,
     productMatrix,
     insights: updates.insights ?? existing.insights,
     lastModifiedAt: new Date().toISOString(),

@@ -74,6 +74,7 @@ export interface OverallSummary {
   totalAdFee: number;
   totalProfit: number;
   totalMaterialCost: number;
+  marketingCost: number;    // 협찬 마케팅 비용 (totalNetProfit에서 차감됨)
   totalNetProfit: number;
   // 판매량
   totalQuantity: number;
@@ -100,6 +101,23 @@ export interface ProductMatrixRow {
   coupang: number;
   offline: number;
   total: number;
+}
+
+// ─── 협찬 마케팅 데이터 ────────────────────────────────────────────────────
+
+/** 협찬 제공 상품 1건 */
+export interface SponsoredItem {
+  productName: string;       // canonical 상품명 (productMatrix 기준)
+  category: ProductCategory;
+  quantity: number;
+}
+
+/** 협찬 마케팅 전체 데이터 (수기 입력) */
+export interface SponsorshipData {
+  items: SponsoredItem[];        // 협찬 제공 상품 목록
+  marketingCost: number;         // 마케팅 비용 (순이익에서 차감)
+  totalQuantity: number;         // 총 협찬 제공 수량 (자동 계산)
+  handmadeQuantity: number;      // 끈갈피 협찬 제공 수량 (자동 계산)
 }
 
 // ─── 상품 매핑 (네이버↔쿠팡 상품명 연결) ─────────────────────────────────
@@ -157,12 +175,14 @@ export interface MonthlyReport {
   naver: NaverData;
   coupang: CoupangData;
   offline: OfflineData;
+  sponsorship: SponsorshipData;       // 협찬 마케팅 데이터 (수기 입력)
   summary: OverallSummary;
   // 랭킹
-  naverRanking: ProductRankEntry[]; // 네이버 TOP3
-  coupangRanking: ProductRankEntry[]; // 쿠팡 TOP3
-  offlineRanking: ProductRankEntry[]; // 오프라인 TOP3
-  overallRanking: ProductRankEntry[]; // 전체 통합 TOP5
+  naverRanking: ProductRankEntry[];           // 네이버 TOP3
+  coupangRanking: ProductRankEntry[];         // 쿠팡 TOP3
+  offlineRanking: ProductRankEntry[];         // 오프라인 TOP3
+  overallRanking: ProductRankEntry[];         // 전체 통합 TOP5
+  sponsorExcludedRanking: ProductRankEntry[]; // 협찬 제외 TOP5
   productMatrix: ProductMatrixRow[]; // 상품 × 플랫폼 표
   insights: SalesInsight[];
   collectedAt: string; // ISO 8601

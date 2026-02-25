@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { MonthlyReport } from "@/lib/types";
 import OverallSummarySection from "@/components/dashboard/OverallSummarySection";
 import PlatformSection from "@/components/dashboard/PlatformSection";
+import SponsorshipCard from "@/components/dashboard/SponsorshipCard";
 import RankingSection from "@/components/dashboard/RankingSection";
 import MatrixSection from "@/components/dashboard/MatrixSection";
 import InsightsSection from "@/components/dashboard/InsightsSection";
@@ -227,11 +228,18 @@ export default function MonthlyPage() {
             onUpdate={handleUpdate}
           />
 
+          <SponsorshipCard
+            sponsorship={report.sponsorship ?? { items: [], marketingCost: 0, totalQuantity: 0, handmadeQuantity: 0 }}
+            productMatrix={report.productMatrix}
+            onUpdate={handleUpdate}
+          />
+
           <RankingSection
             overallRanking={report.overallRanking}
             naverRanking={report.naverRanking}
             coupangRanking={report.coupangRanking}
             offlineRanking={report.offlineRanking}
+            sponsorExcludedRanking={report.sponsorExcludedRanking}
           />
 
           <MatrixSection matrix={report.productMatrix} />

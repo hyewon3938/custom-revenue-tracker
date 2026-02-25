@@ -22,6 +22,7 @@ import {
   calcPlatformRanking,
   calcOverallRanking,
   calcProductMatrix,
+  calcSponsorExcludedRanking,
 } from "@/lib/calculations/profit";
 import { loadProductMapping, syncNewProductsToMapping } from "@/lib/storage/mapping-store";
 
@@ -234,7 +235,15 @@ export async function collectMonthlyData(
 
   const mapping = await loadProductMapping();
 
-  const summary = calcOverallSummary(naverData, coupangData, offline);
+  // 협찬 초기값 (수기 입력이므로 빈 상태로 시작)
+  const sponsorship = {
+    items: [],
+    marketingCost: 0,
+    totalQuantity: 0,
+    handmadeQuantity: 0,
+  };
+
+  const summary = calcOverallSummary(naverData, coupangData, offline, 0);
   const naverRanking = calcPlatformRanking(naverData.products, 3, mapping);
   const coupangRanking = calcPlatformRanking(coupangData.products, 3, mapping);
   const offlineRanking = calcPlatformRanking(offline.products, 3, mapping);
@@ -242,6 +251,14 @@ export async function collectMonthlyData(
     naverData.products,
     coupangData.products,
     offline.products,
+    mapping,
+    5
+  );
+  const sponsorExcludedRanking = calcSponsorExcludedRanking(
+    naverData.products,
+    coupangData.products,
+    offline.products,
+    [],
     mapping,
     5
   );
@@ -259,11 +276,13 @@ export async function collectMonthlyData(
     naver: naverData,
     coupang: coupangData,
     offline,
+    sponsorship,
     summary,
     naverRanking,
     coupangRanking,
     offlineRanking,
     overallRanking,
+    sponsorExcludedRanking,
     productMatrix,
     collectedAt: now,
     lastModifiedAt: now,

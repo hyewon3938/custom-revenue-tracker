@@ -74,13 +74,17 @@ export default function OverallSummarySection({
           <CostRow label="플랫폼 수수료" value={summary.totalCommissionFee} />
           <CostRow label="물류비" value={summary.totalLogisticsFee} />
           <CostRow label="광고비" value={summary.totalAdFee} />
+          {(summary.marketingCost ?? 0) > 0 && (
+            <CostRow label="마케팅 비용" value={summary.marketingCost} />
+          )}
           <div className="flex justify-between items-center pt-2 mt-1">
             <span className="text-sm font-semibold text-gray-700">합계</span>
             <span className="text-sm font-bold text-gray-900">
               {krw(
                 summary.totalCommissionFee +
                   summary.totalLogisticsFee +
-                  summary.totalAdFee
+                  summary.totalAdFee +
+                  (summary.marketingCost ?? 0)
               )}
             </span>
           </div>
