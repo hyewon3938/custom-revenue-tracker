@@ -1,2 +1,2 @@
-# leecommit-sales-dashboard
-리커밋 매출 관리 자동화 대시보드
+# custom-revenue-tracker
+핸드메이드 제품 판매 통합 관리 대시보드
