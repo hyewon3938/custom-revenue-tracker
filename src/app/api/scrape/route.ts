@@ -6,8 +6,8 @@ import {
   calcNaverShippingStats,
   naverMaterialBase,
   gosanMaterialBase,
-  rebuildDerivedFields,
 } from "@/lib/calculations/profit";
+import { rebuildDerivedFields } from "@/lib/calculations/ranking";
 
 /**
  * POST /api/scrape

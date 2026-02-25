@@ -1,6 +1,6 @@
 import { Page, Frame } from "playwright";
 import { ProductSales } from "@/lib/types";
-import { detectCategory } from "@/lib/calculations/profit";
+import { detectCategory } from "@/lib/calculations/product";
 import { NAVER_URLS, getContentFrame } from "./naver-auth";
 import { setDateRangeWithCalendar } from "./naver-datepicker";
 import { goToNextPageInGrid } from "./naver-utils";

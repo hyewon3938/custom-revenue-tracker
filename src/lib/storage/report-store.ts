@@ -14,9 +14,9 @@ import {
   naverMaterialBase,
   coupangMaterialBase,
   gosanMaterialBase,
-  reclassifyAndSummarize,
-  rebuildDerivedFields,
 } from "@/lib/calculations/profit";
+import { reclassifyAndSummarize } from "@/lib/calculations/product";
+import { rebuildDerivedFields } from "@/lib/calculations/ranking";
 import { deepMerge } from "@/lib/utils/deep-merge";
 import { getPrevMonth } from "@/lib/utils/format";
 

@@ -13,7 +13,7 @@ import { MonthlyReport } from "../src/lib/types";
 import {
   calcOverallRanking,
   calcProductMatrix,
-} from "../src/lib/calculations/profit";
+} from "../src/lib/calculations/ranking";
 import {
   loadProductMapping,
 } from "../src/lib/storage/mapping-store";

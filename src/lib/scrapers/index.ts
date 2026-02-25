@@ -20,11 +20,13 @@ import {
   naverMaterialBase,
   coupangMaterialBase,
   calcOverallSummary,
+} from "@/lib/calculations/profit";
+import {
   calcPlatformRanking,
   calcOverallRanking,
   calcProductMatrix,
   calcSponsorExcludedRanking,
-} from "@/lib/calculations/profit";
+} from "@/lib/calculations/ranking";
 import { loadProductMapping, syncNewProductsToMapping } from "@/lib/storage/mapping-store";
 
 const EMPTY_FEES: PlatformFees = {
