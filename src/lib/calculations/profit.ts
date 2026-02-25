@@ -13,7 +13,9 @@ import {
   ProductCategory,
   ProductMappingConfig,
   SponsoredItem,
+  SponsorshipData,
 } from "@/lib/types";
+import { loadProductMapping } from "@/lib/storage/mapping-store";
 
 // ─── 환경변수 유틸 ──────────────────────────────────────────────────────────
 
@@ -133,6 +135,35 @@ export function calcOverallSummary(
     totalQuantity: naver.totalQuantity + coupang.totalQuantity + offTotal,
     handmadeQuantity: naver.handmadeQuantity + coupang.handmadeQuantity + offHandmade,
     otherQuantity: naver.otherQuantity + coupang.otherQuantity + offOther,
+  };
+}
+
+// ─── 상품 카테고리 판별 + 재분류 ────────────────────────────────────────────
+
+/** 상품명으로 카테고리 자동 판별 (끈갈피 = handmade, 독서링 = other) */
+export function detectCategory(productName: string): ProductCategory {
+  if (productName.includes("독서링")) return "other";
+  const handmadeKeywords = ["끈갈피", "북마크"];
+  return handmadeKeywords.some((kw) => productName.includes(kw))
+    ? "handmade"
+    : "other";
+}
+
+/** products 배열에서 카테고리를 재분류하고 수량 합계를 계산 */
+export function reclassifyAndSummarize(products: ProductSales[]) {
+  const reclassified = products.map((p) => ({
+    ...p,
+    category: detectCategory(p.productName),
+  }));
+  return {
+    products: reclassified,
+    totalQuantity: reclassified.reduce((s, p) => s + p.quantity, 0),
+    handmadeQuantity: reclassified
+      .filter((p) => p.category === "handmade")
+      .reduce((s, p) => s + p.quantity, 0),
+    otherQuantity: reclassified
+      .filter((p) => p.category === "other")
+      .reduce((s, p) => s + p.quantity, 0),
   };
 }
 
@@ -403,5 +434,46 @@ export function calcProductMatrix(
       total: v.naver + v.coupang + v.offline,
     }))
     .sort((a, b) => b.total - a.total);
+}
+
+// ─── 파생 필드 일괄 재계산 ──────────────────────────────────────────────────
+
+/**
+ * summary·ranking·matrix를 일괄 재계산.
+ * updateReport()와 scrape/route.ts에서 공통 사용.
+ */
+export async function rebuildDerivedFields(
+  naver: NaverData,
+  coupang: CoupangData,
+  offline: OfflineData[],
+  sponsorship: SponsorshipData
+) {
+  const mapping = await loadProductMapping();
+  const allOfflineProducts = offline.flatMap((v) => v.products);
+
+  const summary = calcOverallSummary(naver, coupang, offline, sponsorship.marketingCost);
+  const naverRanking = calcPlatformRanking(naver.products, 3, mapping);
+  const coupangRanking = calcPlatformRanking(coupang.products, 3, mapping);
+  const offlineRanking = calcPlatformRanking(allOfflineProducts, 3, mapping);
+  const overallRanking = calcOverallRanking(
+    naver.products, coupang.products, allOfflineProducts, mapping, 5
+  );
+  const sponsorExcludedRanking = calcSponsorExcludedRanking(
+    naver.products, coupang.products, allOfflineProducts,
+    sponsorship.items, mapping, 5
+  );
+  const productMatrix = calcProductMatrix(
+    naver.products, coupang.products, allOfflineProducts, mapping
+  );
+
+  return {
+    summary,
+    naverRanking,
+    coupangRanking,
+    offlineRanking,
+    overallRanking,
+    sponsorExcludedRanking,
+    productMatrix,
+  };
 }
 

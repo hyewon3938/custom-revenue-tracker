@@ -12,6 +12,7 @@ import {
   LabelList,
 } from "recharts";
 import { MonthlyOverview } from "@/lib/types";
+import { CHART_MARGIN, GRID_PROPS, X_TICK, Y_TICK, LABEL_STYLE } from "./chart-config";
 
 interface Props {
   data: MonthlyOverview[];
@@ -20,12 +21,12 @@ interface Props {
 export default function QuantityChart({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 24, right: 8, left: 8, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+      <BarChart data={data} margin={CHART_MARGIN}>
+        <CartesianGrid {...GRID_PROPS} />
+        <XAxis dataKey="label" tick={X_TICK} />
         <YAxis
           tickFormatter={(v) => `${v}개`}
-          tick={{ fontSize: 11 }}
+          tick={Y_TICK}
           width={44}
         />
         <Tooltip formatter={(value: number | undefined) => [`${value ?? 0}개`]} />
@@ -49,7 +50,7 @@ export default function QuantityChart({ data }: Props) {
             dataKey="totalQuantity"
             position="top"
             formatter={(v: unknown) => `${(v as number) ?? 0}개`}
-            style={{ fontSize: 11, fill: "#374151", fontWeight: 600 }}
+            style={{ ...LABEL_STYLE, fill: "#374151" }}
           />
         </Bar>
       </BarChart>

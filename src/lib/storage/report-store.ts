@@ -5,8 +5,8 @@ import {
   NaverData,
   CoupangData,
   OfflineData,
-  ProductSales,
   SponsorshipData,
+  DeepPartial,
 } from "@/lib/types";
 import {
   calcPlatformProfit,
@@ -14,13 +14,10 @@ import {
   naverMaterialBase,
   coupangMaterialBase,
   gosanMaterialBase,
-  calcOverallSummary,
-  calcPlatformRanking,
-  calcOverallRanking,
-  calcProductMatrix,
-  calcSponsorExcludedRanking,
+  reclassifyAndSummarize,
+  rebuildDerivedFields,
 } from "@/lib/calculations/profit";
-import { loadProductMapping } from "@/lib/storage/mapping-store";
+import { deepMerge } from "@/lib/utils/deep-merge";
 import { getPrevMonth } from "@/lib/utils/format";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
@@ -87,12 +84,8 @@ export async function loadReport(
   }
 }
 
-/**
- * 수기 편집용 업데이트 함수.
- *
- * updates에 포함된 필드만 기존 레포트에 병합하고,
- * 플랫폼 데이터가 변경되면 profit·summary·ranking 자동 재계산.
- */
+// ─── updateReport 서브 함수 ────────────────────────────────────────────────
+
 const DEFAULT_SPONSORSHIP: SponsorshipData = {
   items: [],
   marketingCost: 0,
@@ -100,45 +93,22 @@ const DEFAULT_SPONSORSHIP: SponsorshipData = {
   handmadeQuantity: 0,
 };
 
-export async function updateReport(
-  year: number,
-  month: number,
+/** 오프라인 입점처 배열에 추가/삭제/수정 반영 */
+function applyOfflineUpdates(
+  existing: OfflineData[],
   updates: {
-    naver?: DeepPartial<NaverData>;
-    coupang?: DeepPartial<CoupangData>;
     offline?: DeepPartial<OfflineData>;
     offlineVenueId?: string;
     addOfflineVenue?: { id: string; name: string };
     removeOfflineVenueId?: string;
-    sponsorship?: DeepPartial<SponsorshipData>;
-    insights?: MonthlyReport["insights"];
   }
-): Promise<MonthlyReport> {
-  const existing = await loadReport(year, month);
-  if (!existing) {
-    throw new Error(
-      `${year}년 ${month}월 레포트가 없습니다. 먼저 수집을 실행해주세요.`
-    );
-  }
+): OfflineData[] {
+  let venues = [...existing];
 
-  const naver = updates.naver
-    ? deepMerge(existing.naver, updates.naver)
-    : existing.naver;
-
-  const coupangMerged = updates.coupang
-    ? deepMerge(existing.coupang, updates.coupang)
-    : existing.coupang;
-
-  const coupang: CoupangData = coupangMerged;
-
-  // ─── 오프라인 다중 입점처 처리 ────────────────────────────────────────
-  let offlineVenues: OfflineData[] = [...existing.offline];
-
-  // 입점처 추가 (빈 데이터)
   if (updates.addOfflineVenue) {
     const { id, name } = updates.addOfflineVenue;
-    if (!offlineVenues.some((v) => v.venueId === id)) {
-      offlineVenues.push({
+    if (!venues.some((v) => v.venueId === id)) {
+      venues.push({
         venueId: id,
         venueName: name,
         revenue: 0,
@@ -152,21 +122,14 @@ export async function updateReport(
     }
   }
 
-  // 입점처 비활성화 (배열에서 제거)
   if (updates.removeOfflineVenueId) {
-    offlineVenues = offlineVenues.filter(
-      (v) => v.venueId !== updates.removeOfflineVenueId
-    );
+    venues = venues.filter((v) => v.venueId !== updates.removeOfflineVenueId);
   }
 
-  // 특정 입점처 데이터 수정
   if (updates.offline && updates.offlineVenueId) {
-    offlineVenues = offlineVenues.map((venue) => {
+    venues = venues.map((venue) => {
       if (venue.venueId !== updates.offlineVenueId) return venue;
-
       const merged = deepMerge(venue, updates.offline!);
-
-      // products가 교체됐으면 수량 합계 자동 재계산
       if (updates.offline!.products !== undefined) {
         const { products, ...qtySummary } = reclassifyAndSummarize(merged.products);
         return { ...merged, products, ...qtySummary };
@@ -175,11 +138,18 @@ export async function updateReport(
     });
   }
 
-  // 제품 카테고리 재분류 (독서링 등 기타 상품 보정) + 수량 재계산
+  return venues;
+}
+
+/** 플랫폼별 카테고리 재분류 + 이익 재계산 */
+function recalcPlatformProfits(
+  naver: NaverData,
+  coupang: CoupangData,
+  offlineVenues: OfflineData[]
+): { naver: NaverData; coupang: CoupangData; offline: OfflineData[] } {
   const naverReclassified = reclassifyAndSummarize(naver.products);
   const coupangReclassified = reclassifyAndSummarize(coupang.products);
 
-  // 각 입점처별 카테고리 재분류 + 이익 재계산
   const offlineWithProfit: OfflineData[] = offlineVenues.map((v) => {
     const { products, ...qtySummary } = reclassifyAndSummarize(v.products);
     const matBase = v.venueId === "gosan"
@@ -191,7 +161,6 @@ export async function updateReport(
     };
   });
 
-  // 네이버: shippingStats + logisticsFee를 원본 데이터에서 매번 재계산
   const naverShippingStats = calcNaverShippingStats(
     naver.shippingCollected ?? 0,
     naver.payerCount ?? 0
@@ -211,7 +180,6 @@ export async function updateReport(
     ),
   };
 
-  // 쿠팡: 배송 마크업 제외한 정가 기준 부자재비
   const coupangTotalQty = coupangReclassified.totalQuantity;
   const coupangWithProfit: CoupangData = {
     ...coupang,
@@ -225,75 +193,75 @@ export async function updateReport(
     ),
   };
 
-  // 협찬 데이터 병합
-  const existingSponsorship: SponsorshipData = existing.sponsorship ?? DEFAULT_SPONSORSHIP;
-  const sponsorshipMerged = updates.sponsorship
-    ? deepMerge(existingSponsorship, updates.sponsorship)
-    : existingSponsorship;
+  return { naver: naverWithProfit, coupang: coupangWithProfit, offline: offlineWithProfit };
+}
 
-  // items가 교체됐으면 수량 합계 + 마케팅 비용 자동 재계산
-  const sponsorship: SponsorshipData = (() => {
-    if (updates.sponsorship?.items === undefined) return sponsorshipMerged;
+/** 협찬 데이터 병합 + 수량/비용 자동 재계산 */
+function mergeSponsorshipData(
+  existing: SponsorshipData | undefined,
+  patch: DeepPartial<SponsorshipData> | undefined
+): SponsorshipData {
+  const base = existing ?? DEFAULT_SPONSORSHIP;
+  const merged = patch ? deepMerge(base, patch) : base;
 
-    const totalQuantity = sponsorshipMerged.items.reduce((s, i) => s + i.quantity, 0);
-    const handmadeQuantity = sponsorshipMerged.items
-      .filter((i) => i.category === "handmade")
-      .reduce((s, i) => s + i.quantity, 0);
-    const costPerHandmade = parseInt(process.env.REVIEW_MARKETING_COST_PER_HANDMADE ?? "0");
-    const marketingCost = handmadeQuantity * costPerHandmade;
+  if (patch?.items === undefined) return merged;
 
-    return { ...sponsorshipMerged, totalQuantity, handmadeQuantity, marketingCost };
-  })();
+  const totalQuantity = merged.items.reduce((s, i) => s + i.quantity, 0);
+  const handmadeQuantity = merged.items
+    .filter((i) => i.category === "handmade")
+    .reduce((s, i) => s + i.quantity, 0);
+  const costPerHandmade = parseInt(process.env.REVIEW_MARKETING_COST_PER_HANDMADE ?? "0");
 
-  const mapping = await loadProductMapping();
+  return { ...merged, totalQuantity, handmadeQuantity, marketingCost: handmadeQuantity * costPerHandmade };
+}
 
-  // 모든 오프라인 입점처 products 합산
-  const allOfflineProducts = offlineWithProfit.flatMap((v) => v.products);
+// ─── updateReport ──────────────────────────────────────────────────────────
 
-  const summary = calcOverallSummary(
-    naverWithProfit,
-    coupangWithProfit,
-    offlineWithProfit,
-    sponsorship.marketingCost
-  );
-  const naverRanking = calcPlatformRanking(naverWithProfit.products, 3, mapping);
-  const coupangRanking = calcPlatformRanking(coupangWithProfit.products, 3, mapping);
-  const offlineRanking = calcPlatformRanking(allOfflineProducts, 3, mapping);
-  const overallRanking = calcOverallRanking(
-    naverWithProfit.products,
-    coupangWithProfit.products,
-    allOfflineProducts,
-    mapping,
-    5
-  );
-  const sponsorExcludedRanking = calcSponsorExcludedRanking(
-    naverWithProfit.products,
-    coupangWithProfit.products,
-    allOfflineProducts,
-    sponsorship.items,
-    mapping,
-    5
-  );
-  const productMatrix = calcProductMatrix(
-    naverWithProfit.products,
-    coupangWithProfit.products,
-    allOfflineProducts,
-    mapping
+/**
+ * 수기 편집용 업데이트 함수.
+ * updates에 포함된 필드만 기존 레포트에 병합하고,
+ * profit·summary·ranking 자동 재계산.
+ */
+export async function updateReport(
+  year: number,
+  month: number,
+  updates: {
+    naver?: DeepPartial<NaverData>;
+    coupang?: DeepPartial<CoupangData>;
+    offline?: DeepPartial<OfflineData>;
+    offlineVenueId?: string;
+    addOfflineVenue?: { id: string; name: string };
+    removeOfflineVenueId?: string;
+    sponsorship?: DeepPartial<SponsorshipData>;
+    insights?: MonthlyReport["insights"];
+  }
+): Promise<MonthlyReport> {
+  const existing = await loadReport(year, month);
+  if (!existing) {
+    throw new Error(`${year}년 ${month}월 레포트가 없습니다. 먼저 수집을 실행해주세요.`);
+  }
+
+  // 1) 플랫폼 데이터 병합
+  const naver = updates.naver ? deepMerge(existing.naver, updates.naver) : existing.naver;
+  const coupang = updates.coupang ? deepMerge(existing.coupang, updates.coupang) : existing.coupang;
+  const offlineVenues = applyOfflineUpdates(existing.offline, updates);
+
+  // 2) 카테고리 재분류 + 이익 재계산
+  const platforms = recalcPlatformProfits(naver, coupang, offlineVenues);
+
+  // 3) 협찬 데이터 병합
+  const sponsorship = mergeSponsorshipData(existing.sponsorship, updates.sponsorship);
+
+  // 4) 파생 필드 재계산 (summary·ranking·matrix)
+  const derived = await rebuildDerivedFields(
+    platforms.naver, platforms.coupang, platforms.offline, sponsorship
   );
 
   const updated: MonthlyReport = {
     ...existing,
-    naver: naverWithProfit,
-    coupang: coupangWithProfit,
-    offline: offlineWithProfit,
+    ...platforms,
     sponsorship,
-    summary,
-    naverRanking,
-    coupangRanking,
-    offlineRanking,
-    overallRanking,
-    sponsorExcludedRanking,
-    productMatrix,
+    ...derived,
     insights: updates.insights ?? existing.insights,
     lastModifiedAt: new Date().toISOString(),
   };
@@ -337,60 +305,3 @@ export async function loadRecentHistory(
   return results;
 }
 
-// ─── 유틸 ──────────────────────────────────────────────────────────────────
-
-/** 상품명으로 카테고리 자동 판별 (끈갈피 = handmade, 독서링 = other) */
-function detectCategory(productName: string): "handmade" | "other" {
-  if (productName.includes("독서링")) return "other";
-  const handmadeKeywords = ["끈갈피", "북마크"];
-  return handmadeKeywords.some((kw) => productName.includes(kw))
-    ? "handmade"
-    : "other";
-}
-
-/** products 배열에서 카테고리를 재분류하고 수량 합계를 계산 */
-function reclassifyAndSummarize(products: ProductSales[]) {
-  const reclassified = products.map((p) => ({
-    ...p,
-    category: detectCategory(p.productName),
-  }));
-  return {
-    products: reclassified,
-    totalQuantity: reclassified.reduce((s, p) => s + p.quantity, 0),
-    handmadeQuantity: reclassified
-      .filter((p) => p.category === "handmade")
-      .reduce((s, p) => s + p.quantity, 0),
-    otherQuantity: reclassified
-      .filter((p) => p.category === "other")
-      .reduce((s, p) => s + p.quantity, 0),
-  };
-}
-
-type DeepPartial<T> = T extends object
-  ? { [K in keyof T]?: DeepPartial<T[K]> }
-  : T;
-
-function deepMerge<T extends object>(target: T, source: DeepPartial<T>): T {
-  const result = { ...target };
-  for (const key in source) {
-    const val = source[key as keyof typeof source];
-    if (val === undefined) continue;
-
-    const targetVal = (target as Record<string, unknown>)[key];
-    if (
-      typeof val === "object" &&
-      val !== null &&
-      !Array.isArray(val) &&
-      typeof targetVal === "object" &&
-      targetVal !== null
-    ) {
-      (result as Record<string, unknown>)[key] = deepMerge(
-        targetVal as object,
-        val as DeepPartial<object>
-      );
-    } else {
-      (result as Record<string, unknown>)[key] = val;
-    }
-  }
-  return result;
-}

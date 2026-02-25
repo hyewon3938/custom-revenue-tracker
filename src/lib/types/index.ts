@@ -189,6 +189,11 @@ export interface OverviewResponse {
   };
 }
 
+// ─── 유틸 타입 ──────────────────────────────────────────────────────────────
+export type DeepPartial<T> = T extends object
+  ? { [K in keyof T]?: DeepPartial<T[K]> }
+  : T;
+
 // ─── 월별 종합 레포트 (저장/편집 단위) ───────────────────────────────────
 export interface MonthlyReport {
   period: { year: number; month: number };

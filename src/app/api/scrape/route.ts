@@ -6,13 +6,8 @@ import {
   calcNaverShippingStats,
   naverMaterialBase,
   gosanMaterialBase,
-  calcOverallSummary,
-  calcPlatformRanking,
-  calcOverallRanking,
-  calcProductMatrix,
-  calcSponsorExcludedRanking,
+  rebuildDerivedFields,
 } from "@/lib/calculations/profit";
-import { loadProductMapping } from "@/lib/storage/mapping-store";
 
 /**
  * POST /api/scrape
@@ -79,42 +74,10 @@ export async function POST(request: NextRequest) {
         };
       });
 
-      const mapping = await loadProductMapping();
-      const marketingCost = reportData.sponsorship.marketingCost;
-      const allOfflineProducts = reportData.offline.flatMap((v) => v.products);
-
-      reportData.summary = calcOverallSummary(
-        reportData.naver,
-        reportData.coupang,
-        reportData.offline,
-        marketingCost
+      const derived = await rebuildDerivedFields(
+        reportData.naver, reportData.coupang, reportData.offline, reportData.sponsorship
       );
-      reportData.offlineRanking = calcPlatformRanking(
-        allOfflineProducts,
-        3,
-        mapping
-      );
-      reportData.overallRanking = calcOverallRanking(
-        reportData.naver.products,
-        reportData.coupang.products,
-        allOfflineProducts,
-        mapping,
-        5
-      );
-      reportData.sponsorExcludedRanking = calcSponsorExcludedRanking(
-        reportData.naver.products,
-        reportData.coupang.products,
-        allOfflineProducts,
-        reportData.sponsorship.items,
-        mapping,
-        5
-      );
-      reportData.productMatrix = calcProductMatrix(
-        reportData.naver.products,
-        reportData.coupang.products,
-        allOfflineProducts,
-        mapping
-      );
+      Object.assign(reportData, derived);
     }
 
     // 3) 인사이트는 사용자가 수기 데이터 입력 후 직접 생성 (POST /api/insights)
