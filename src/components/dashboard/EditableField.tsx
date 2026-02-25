@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-
-const formatKRW = (n: number) =>
-  n.toLocaleString("ko-KR") + " 원";
+import KRWText from "@/components/ui/KRWText";
 
 interface Props {
   value: number;
@@ -64,7 +62,7 @@ export default function EditableField({ value, onSave, className = "" }: Props) 
       title="클릭하여 편집"
       className={`hover:bg-brand-50 hover:text-brand-600 rounded px-1 py-0.5 transition-colors cursor-text text-right font-semibold text-sm ${saving ? "opacity-40" : ""} ${className}`}
     >
-      {formatKRW(value)}
+      <KRWText n={value} />
     </button>
   );
 }
