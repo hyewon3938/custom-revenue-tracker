@@ -81,13 +81,8 @@ function NaverCard({
       <Row label="정산금" value={<KRWText n={data.fees.settlementAmount} />} />
       <Row label="수수료" value={<KRWText n={data.fees.commissionFee} />} />
       <Row label="배송비" value={<KRWText n={data.fees.logisticsFee} />} />
-      <EditRow
-        label="광고비"
-        value={data.fees.adFee}
-        onSave={(v) => onUpdate({ naver: { fees: { adFee: v } } })}
-      />
 
-      <div className="mt-3 pt-3 border-t border-warm-100">
+      <div className="mt-2 pt-1">
         <Row label="이익" value={<KRWText n={data.profit.profit} />} />
         <Row
           label="부자재비"
@@ -190,7 +185,7 @@ function CoupangCard({
       />
       <Row label="광고비" value={<KRWText n={data.fees.adFee} />} />
 
-      <div className="mt-3 pt-3 border-t border-warm-100">
+      <div className="mt-2 pt-1">
         <Row label="이익" value={<KRWText n={data.profit.profit} />} />
         <Row
           label="부자재비"

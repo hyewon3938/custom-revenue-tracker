@@ -69,12 +69,10 @@ function buildPlatformSection(report: Report): string {
   const naverSection = `### 네이버
 - 매출: ${formatKRW(naver.revenue)}
 - 수수료: ${formatKRW(naver.fees.commissionFee)}
-- 물류비: ${formatKRW(naver.fees.logisticsFee)} (일반배송 ${naver.shippingStats.regularCount}건 / 무료배송 ${naver.shippingStats.freeCount}건)
-- 광고비: ${formatKRW(naver.fees.adFee)}
+- 판매자부담 배송비: ${formatKRW(naver.fees.logisticsFee)} (유료배송 ${naver.shippingStats.regularCount}건 / 무료배송 ${naver.shippingStats.freeCount}건)
 - 정산금: ${formatKRW(naver.fees.settlementAmount)}
 - 이익: ${formatKRW(naver.profit.profit)} / 순이익: ${formatKRW(naver.profit.netProfit)}
 - 이익률: ${profitMargin(naver.revenue, naver.profit.netProfit)}%
-- ROAS: ${calcROAS(naver.revenue, naver.fees.adFee)}
 - 판매량: 전체 ${naver.totalQuantity}개 · 끈갈피 ${naver.handmadeQuantity}개`;
 
   const coupangSection = `### 쿠팡
