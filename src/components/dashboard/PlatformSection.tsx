@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   NaverData,
   CoupangData,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/types";
 import { formatKRW as krw } from "@/lib/utils/format";
 import EditableField from "./EditableField";
+import ProductQtyEditor from "./ProductQtyEditor";
 
 // ─── 공통 Row 컴포넌트 ─────────────────────────────────────────────────────
 
@@ -48,117 +49,6 @@ function NetProfitRow({ value }: { value: number }) {
       <span className={`text-sm font-bold ${value >= 0 ? "text-blue-600" : "text-red-500"}`}>
         {krw(value)}
       </span>
-    </div>
-  );
-}
-
-// ─── 상품별 수량 수기 편집 (쿠팡 수기 모드 + 오프라인 공통) ─────────────────
-//
-// CoupangCard(수기 모드)와 OfflineCard에서 동일하게 쓰이는
-// 토글 + 수량 입력 + blur-on-save 로직을 단일 컴포넌트로 통합.
-
-function ProductQtyEditor({
-  savedProducts,
-  editList,
-  totalQuantity,
-  handmadeQuantity,
-  platform,
-  onSave,
-}: {
-  savedProducts: ProductSales[];
-  editList: ProductMatrixRow[];
-  totalQuantity: number;
-  handmadeQuantity: number;
-  platform: "coupang" | "offline";
-  onSave: (products: ProductSales[]) => Promise<void>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [quantities, setQuantities] = useState<Record<string, number>>(() =>
-    Object.fromEntries(savedProducts.map((p) => [p.productName, p.quantity]))
-  );
-
-  // 부모 데이터 갱신 시 로컬 수량 동기화
-  useEffect(() => {
-    setQuantities(Object.fromEntries(savedProducts.map((p) => [p.productName, p.quantity])));
-  }, [savedProducts]);
-
-  const sorted = useMemo(
-    () => [...editList].sort((a, b) => a.productName.localeCompare(b.productName, "ko")),
-    [editList]
-  );
-
-  const handleSave = useCallback(
-    async (next: Record<string, number>) => {
-      const products: ProductSales[] = sorted
-        .filter((row) => (next[row.productName] ?? 0) > 0)
-        .map((row) => ({
-          productName: row.productName,
-          category: row.category,
-          platform,
-          quantity: next[row.productName],
-        }));
-      await onSave(products);
-    },
-    [sorted, platform, onSave]
-  );
-
-  const handleBlur = useCallback(
-    (name: string, value: number) => {
-      const prev = savedProducts.find((p) => p.productName === name)?.quantity ?? 0;
-      if (value !== prev) handleSave({ ...quantities, [name]: value });
-    },
-    [savedProducts, quantities, handleSave]
-  );
-
-  return (
-    <div className="mt-3 pt-3 border-t border-gray-100">
-      {sorted.length > 0 ? (
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="flex items-center justify-between w-full text-left mb-1.5"
-        >
-          <span className="text-xs text-gray-400">
-            판매량 <span className="text-blue-400">(수기)</span>
-          </span>
-          <svg
-            className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-      ) : (
-        <p className="text-xs text-gray-400 mb-1.5">판매량</p>
-      )}
-
-      <p className="text-sm text-gray-700">
-        전체 {totalQuantity}개 · 끈갈피 {handmadeQuantity}개
-      </p>
-
-      {open && sorted.length > 0 && (
-        <div className="mt-2 space-y-1.5">
-          {sorted.map((row) => (
-            <div key={row.productName} className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-600 truncate" title={row.productName}>
-                {row.productName}
-              </span>
-              <input
-                type="number"
-                min="0"
-                value={quantities[row.productName] ?? 0}
-                onChange={(e) =>
-                  setQuantities((prev) => ({
-                    ...prev,
-                    [row.productName]: Math.max(0, Number(e.target.value)),
-                  }))
-                }
-                onBlur={(e) => handleBlur(row.productName, Math.max(0, Number(e.target.value)))}
-                className="w-16 shrink-0 text-right text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300"
-              />
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -232,7 +122,7 @@ function CoupangCard({
 }) {
   const isManual = isCoupangManual(year, month);
 
-  // 수기 모드: productMatrix에 없는 기존 쿠팡 상품(예: 이전 스크래핑 잔여 데이터)도 포함
+  // 수기 모드: productMatrix에 없는 기존 쿠팡 상품도 포함
   const editList = useMemo(() => {
     if (!isManual) return [];
     const knownNames = new Set(productMatrix.map((r) => r.productName));
@@ -249,9 +139,19 @@ function CoupangCard({
     return [...productMatrix, ...extras];
   }, [isManual, productMatrix, data.products]);
 
-  const handleSave = useCallback(
-    (products: ProductSales[]) => onUpdate({ coupang: { products } }),
-    [onUpdate]
+  const saveProducts = useCallback(
+    async (quantities: Record<string, number>) => {
+      const products: ProductSales[] = editList
+        .filter((row) => (quantities[row.productName] ?? 0) > 0)
+        .map((row) => ({
+          productName: row.productName,
+          category: row.category,
+          platform: "coupang" as const,
+          quantity: quantities[row.productName],
+        }));
+      await onUpdate({ coupang: { products } });
+    },
+    [editList, onUpdate]
   );
 
   return (
@@ -281,12 +181,13 @@ function CoupangCard({
 
       {isManual ? (
         <ProductQtyEditor
-          savedProducts={data.products}
+          label="판매량"
+          savedItems={data.products}
           editList={editList}
           totalQuantity={data.totalQuantity}
           handmadeQuantity={data.handmadeQuantity}
-          platform="coupang"
-          onSave={handleSave}
+          summaryPrefix="전체"
+          onSave={saveProducts}
         />
       ) : (
         <div className="mt-3 pt-3 border-t border-gray-100">
@@ -311,9 +212,19 @@ function OfflineCard({
   productMatrix: ProductMatrixRow[];
   onUpdate: (patch: object) => Promise<void>;
 }) {
-  const handleSave = useCallback(
-    (products: ProductSales[]) => onUpdate({ offline: { products } }),
-    [onUpdate]
+  const saveProducts = useCallback(
+    async (quantities: Record<string, number>) => {
+      const products: ProductSales[] = productMatrix
+        .filter((row) => (quantities[row.productName] ?? 0) > 0)
+        .map((row) => ({
+          productName: row.productName,
+          category: row.category,
+          platform: "offline" as const,
+          quantity: quantities[row.productName],
+        }));
+      await onUpdate({ offline: { products } });
+    },
+    [productMatrix, onUpdate]
   );
 
   return (
@@ -335,12 +246,13 @@ function OfflineCard({
       </div>
 
       <ProductQtyEditor
-        savedProducts={data.products}
+        label="판매량"
+        savedItems={data.products}
         editList={productMatrix}
         totalQuantity={data.totalQuantity}
         handmadeQuantity={data.handmadeQuantity}
-        platform="offline"
-        onSave={handleSave}
+        summaryPrefix="전체"
+        onSave={saveProducts}
       />
     </div>
   );
