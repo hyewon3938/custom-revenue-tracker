@@ -46,18 +46,27 @@ export function calcOnlineProfit(
 }
 
 /**
- * 오프라인 플랫폼 이익 계산 (고산의낮)
+ * 오프라인 플랫폼 이익 계산
  * - 이익 = 매출 - 수수료 - 물류비 - 광고비
- * - 부자재비 = 매출 × 환경변수 비율
+ * - 부자재비:
+ *   · 고산의낮(할인 납품): (매출 + 수수료) × 비율 — 수수료=할인분이므로 정가 기준
+ *   · 기타 입점처(정가 판매): 매출 × 비율
  * - 순이익 = 이익 - 부자재비
  */
 export function calcOfflineProfit(
   revenue: number,
-  fees: PlatformFees
+  fees: PlatformFees,
+  venueId: string
 ): PlatformProfit {
   const profit =
     revenue - fees.commissionFee - fees.logisticsFee - fees.adFee;
-  const materialCost = Math.round(revenue * getRate("OFFLINE_MATERIAL_RATE"));
+  // 고산의낮: 할인 납품이라 부자재비는 정가(매출+할인분) 기준
+  // 기타 입점처: 정가 판매이므로 매출 기준
+  const materialBase =
+    venueId === "gosan" ? revenue + fees.commissionFee : revenue;
+  const materialCost = Math.round(
+    materialBase * getRate("OFFLINE_MATERIAL_RATE")
+  );
   const netProfit = profit - materialCost;
   return { profit, materialCost, netProfit };
 }

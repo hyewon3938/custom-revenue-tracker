@@ -217,7 +217,7 @@ export async function collectMonthlyData(
       handmadeQuantity: 0,
       otherQuantity: 0,
       fees: offlineFees,
-      profit: calcOfflineProfit(0, offlineFees),
+      profit: calcOfflineProfit(0, offlineFees, "gosan"),
       products: [],
     },
   ];

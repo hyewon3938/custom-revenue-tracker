@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       // 각 입점처별 이익 재계산
       reportData.offline = reportData.offline.map((v) => ({
         ...v,
-        profit: calcOfflineProfit(v.revenue, v.fees),
+        profit: calcOfflineProfit(v.revenue, v.fees, v.venueId),
       }));
 
       const mapping = await loadProductMapping();
