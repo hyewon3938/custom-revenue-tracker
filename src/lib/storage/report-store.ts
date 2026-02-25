@@ -5,6 +5,7 @@ import {
   NaverData,
   CoupangData,
   OfflineData,
+  ProductSales,
 } from "@/lib/types";
 import {
   calcOnlineProfit,
@@ -78,9 +79,17 @@ export async function updateReport(
   const naver = updates.naver
     ? deepMerge(existing.naver, updates.naver)
     : existing.naver;
-  const coupang = updates.coupang
+
+  const coupangMerged = updates.coupang
     ? deepMerge(existing.coupang, updates.coupang)
     : existing.coupang;
+
+  // coupang.products가 교체됐으면 수량 합계 자동 재계산
+  const coupang: CoupangData =
+    updates.coupang?.products !== undefined
+      ? { ...coupangMerged, ...calcQuantitySummary(coupangMerged.products) }
+      : coupangMerged;
+
   const offlineMerged = updates.offline
     ? deepMerge(existing.offline, updates.offline)
     : existing.offline;
@@ -90,21 +99,17 @@ export async function updateReport(
   const offlineCommissionPerItem = parseInt(
     process.env.OFFLINE_COMMISSION_PER_ITEM ?? "0"
   );
+  // offline.products가 교체됐으면 수량 합계 + 입점 수수료 자동 재계산
+  // 입점 수수료율은 환경변수로 관리 (수기로 직접 수정 가능)
   const offline: OfflineData = (() => {
     if (updates.offline?.products === undefined) return offlineMerged;
-    const totalQuantity = offlineMerged.products.reduce((s, p) => s + p.quantity, 0);
+    const qtySummary = calcQuantitySummary(offlineMerged.products);
     return {
       ...offlineMerged,
-      totalQuantity,
-      handmadeQuantity: offlineMerged.products
-        .filter((p) => p.category === "handmade")
-        .reduce((s, p) => s + p.quantity, 0),
-      otherQuantity: offlineMerged.products
-        .filter((p) => p.category === "other")
-        .reduce((s, p) => s + p.quantity, 0),
+      ...qtySummary,
       fees: {
         ...offlineMerged.fees,
-        commissionFee: totalQuantity * offlineCommissionPerItem,
+        commissionFee: qtySummary.totalQuantity * offlineCommissionPerItem,
       },
     };
   })();
@@ -184,6 +189,19 @@ export async function listReports(): Promise<
 }
 
 // ─── 유틸 ──────────────────────────────────────────────────────────────────
+
+/** products 배열에서 총·끈갈피·기타 수량 합계를 계산 */
+function calcQuantitySummary(products: ProductSales[]) {
+  return {
+    totalQuantity: products.reduce((s, p) => s + p.quantity, 0),
+    handmadeQuantity: products
+      .filter((p) => p.category === "handmade")
+      .reduce((s, p) => s + p.quantity, 0),
+    otherQuantity: products
+      .filter((p) => p.category === "other")
+      .reduce((s, p) => s + p.quantity, 0),
+  };
+}
 
 type DeepPartial<T> = T extends object
   ? { [K in keyof T]?: DeepPartial<T[K]> }
