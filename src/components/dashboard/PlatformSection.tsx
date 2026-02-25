@@ -12,6 +12,7 @@ import {
 import KRWText from "@/components/ui/KRWText";
 import EditableField from "./EditableField";
 import ProductQtyEditor from "./ProductQtyEditor";
+import VenueModal from "./VenueModal";
 
 // ─── 공통 Row 컴포넌트 ─────────────────────────────────────────────────────
 
@@ -47,7 +48,11 @@ function NetProfitRow({ value }: { value: number }) {
   return (
     <div className="flex justify-between items-center pt-2">
       <span className="text-sm font-semibold text-gray-700">순이익</span>
-      <span className={`text-sm font-bold ${value >= 0 ? "text-brand-500" : "text-red-500"}`}>
+      <span
+        className={`text-sm font-bold ${
+          value >= 0 ? "text-brand-500" : "text-red-500"
+        }`}
+      >
         <KRWText n={value} />
       </span>
     </div>
@@ -67,13 +72,15 @@ function NaverCard({
     <div className="bg-white rounded-xl border border-warm-200 p-5">
       <div className="flex items-center justify-between mb-4">
         <h4 className="font-semibold text-gray-900">네이버 스마트스토어</h4>
-        <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">N</span>
+        <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+          N
+        </span>
       </div>
 
       <Row label="매출" value={<KRWText n={data.revenue} />} />
       <Row label="정산금" value={<KRWText n={data.fees.settlementAmount} />} />
       <Row label="수수료" value={<KRWText n={data.fees.commissionFee} />} />
-      <Row label="물류비" value={<KRWText n={data.fees.logisticsFee} />} />
+      <Row label="배송비" value={<KRWText n={data.fees.logisticsFee} />} />
       <EditRow
         label="광고비"
         value={data.fees.adFee}
@@ -82,7 +89,10 @@ function NaverCard({
 
       <div className="mt-3 pt-3 border-t border-warm-100">
         <Row label="이익" value={<KRWText n={data.profit.profit} />} />
-        <Row label="부자재비" value={<KRWText n={data.profit.materialCost} />} />
+        <Row
+          label="부자재비"
+          value={<KRWText n={data.profit.materialCost} />}
+        />
         <NetProfitRow value={data.profit.netProfit} />
       </div>
 
@@ -91,9 +101,10 @@ function NaverCard({
         <p className="text-sm text-gray-700">
           전체 {data.totalQuantity}개 · 끈갈피 {data.handmadeQuantity}개
         </p>
-        {(data.shippingStats.regularCount + data.shippingStats.freeCount) > 0 && (
+        {data.shippingStats.regularCount + data.shippingStats.freeCount > 0 && (
           <p className="text-xs text-gray-400 mt-1">
-            일반배송 {data.shippingStats.regularCount}건 · 무료배송 {data.shippingStats.freeCount}건
+            일반배송 {data.shippingStats.regularCount}건 · 무료배송{" "}
+            {data.shippingStats.freeCount}건
           </p>
         )}
       </div>
@@ -165,18 +176,26 @@ function CoupangCard({
               수기
             </span>
           )}
-          <span className="text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">C</span>
+          <span className="text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+            C
+          </span>
         </div>
       </div>
 
       <Row label="매출" value={<KRWText n={data.revenue} />} />
       <Row label="판매수수료" value={<KRWText n={data.fees.commissionFee} />} />
-      <Row label="풀필먼트 물류비" value={<KRWText n={data.fees.logisticsFee} />} />
+      <Row
+        label="풀필먼트 물류비"
+        value={<KRWText n={data.fees.logisticsFee} />}
+      />
       <Row label="광고비" value={<KRWText n={data.fees.adFee} />} />
 
       <div className="mt-3 pt-3 border-t border-warm-100">
         <Row label="이익" value={<KRWText n={data.profit.profit} />} />
-        <Row label="부자재비" value={<KRWText n={data.profit.materialCost} />} />
+        <Row
+          label="부자재비"
+          value={<KRWText n={data.profit.materialCost} />}
+        />
         <NetProfitRow value={data.profit.netProfit} />
       </div>
 
@@ -232,17 +251,38 @@ function OfflineCard({
     <div className="bg-white rounded-xl border border-warm-200 p-5">
       <div className="flex items-center justify-between mb-4">
         <h4 className="font-semibold text-gray-900">{data.venueName}</h4>
-        <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">OFF</span>
+        <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+          OFF
+        </span>
       </div>
 
-      <EditRow label="매출" value={data.revenue} onSave={(v) => onUpdate({ offline: { revenue: v } })} />
-      <EditRow label="입점 수수료" value={data.fees.commissionFee} onSave={(v) => onUpdate({ offline: { fees: { commissionFee: v } } })} />
-      <EditRow label="물류비" value={data.fees.logisticsFee} onSave={(v) => onUpdate({ offline: { fees: { logisticsFee: v } } })} />
-      <EditRow label="광고비" value={data.fees.adFee} onSave={(v) => onUpdate({ offline: { fees: { adFee: v } } })} />
+      <EditRow
+        label="매출"
+        value={data.revenue}
+        onSave={(v) => onUpdate({ offline: { revenue: v } })}
+      />
+      <EditRow
+        label="입점 수수료"
+        value={data.fees.commissionFee}
+        onSave={(v) => onUpdate({ offline: { fees: { commissionFee: v } } })}
+      />
+      <EditRow
+        label="입고 배송비"
+        value={data.fees.logisticsFee}
+        onSave={(v) => onUpdate({ offline: { fees: { logisticsFee: v } } })}
+      />
+      <EditRow
+        label="광고비"
+        value={data.fees.adFee}
+        onSave={(v) => onUpdate({ offline: { fees: { adFee: v } } })}
+      />
 
       <div className="mt-3 pt-3 border-t border-warm-100">
         <Row label="이익" value={<KRWText n={data.profit.profit} />} />
-        <Row label="부자재비" value={<KRWText n={data.profit.materialCost} />} />
+        <Row
+          label="부자재비"
+          value={<KRWText n={data.profit.materialCost} />}
+        />
         <NetProfitRow value={data.profit.netProfit} />
       </div>
 
@@ -266,7 +306,7 @@ interface Props {
   month: number;
   naver: NaverData;
   coupang: CoupangData;
-  offline: OfflineData;
+  offline: OfflineData[];
   productMatrix: ProductMatrixRow[];
   onUpdate: (patch: object) => Promise<void>;
 }
@@ -280,14 +320,61 @@ export default function PlatformSection({
   productMatrix,
   onUpdate,
 }: Props) {
+  const [venueModalOpen, setVenueModalOpen] = useState(false);
+
+  // 카드 수에 따른 그리드 레이아웃
+  // 3개: 한 줄 3등분 / 4개: 한 줄 4등분 / 5개+: 한 줄 3개씩
+  const totalCards = 2 + offline.length;
+  const gridCols =
+    totalCards <= 2
+      ? "grid-cols-1 md:grid-cols-2"
+      : totalCards === 3
+        ? "grid-cols-1 md:grid-cols-3"
+        : totalCards === 4
+          ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
+          : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+
   return (
     <section>
-      <h3 className="text-lg font-semibold text-gray-800 mb-3">플랫폼별 매출 · 비용</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <NaverCard data={naver} onUpdate={onUpdate} />
-        <CoupangCard data={coupang} year={year} month={month} productMatrix={productMatrix} onUpdate={onUpdate} />
-        <OfflineCard data={offline} productMatrix={productMatrix} onUpdate={onUpdate} />
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-lg font-semibold text-gray-800">
+          플랫폼별 매출 · 비용
+        </h3>
+        <button
+          onClick={() => setVenueModalOpen(true)}
+          className="text-sm text-brand-500 hover:text-brand-600 font-medium transition-colors"
+        >
+          플랫폼 관리
+        </button>
       </div>
+      <div className={`grid ${gridCols} gap-4`}>
+        <NaverCard data={naver} onUpdate={onUpdate} />
+        <CoupangCard
+          data={coupang}
+          year={year}
+          month={month}
+          productMatrix={productMatrix}
+          onUpdate={onUpdate}
+        />
+        {offline.map((venue) => (
+          <OfflineCard
+            key={venue.venueId}
+            data={venue}
+            productMatrix={productMatrix}
+            onUpdate={async (patch: object) => {
+              await onUpdate({ ...(patch as Record<string, unknown>), offlineVenueId: venue.venueId });
+            }}
+          />
+        ))}
+      </div>
+      <VenueModal
+        isOpen={venueModalOpen}
+        onClose={() => setVenueModalOpen(false)}
+        activeVenues={offline}
+        year={year}
+        month={month}
+        onUpdate={onUpdate}
+      />
     </section>
   );
 }
