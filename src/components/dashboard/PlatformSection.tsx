@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import type { ReactNode } from "react";
 import {
   NaverData,
   CoupangData,
@@ -9,40 +8,14 @@ import {
   ProductMatrixRow,
   ProductSales,
 } from "@/lib/types";
+import Card from "@/components/ui/Card";
+import Row from "@/components/ui/Row";
+import EditRow from "@/components/ui/EditRow";
 import KRWText from "@/components/ui/KRWText";
-import EditableField from "./EditableField";
 import ProductQtyEditor from "./ProductQtyEditor";
 import VenueModal from "./VenueModal";
 
-// ─── 공통 Row 컴포넌트 ─────────────────────────────────────────────────────
-
-function Row({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="flex justify-between items-center py-1.5 border-b border-warm-100 last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-semibold text-gray-800">{value}</span>
-    </div>
-  );
-}
-
-function EditRow({
-  label,
-  value,
-  onSave,
-}: {
-  label: string;
-  value: number;
-  onSave: (v: number) => Promise<void>;
-}) {
-  return (
-    <div className="flex justify-between items-center py-1.5">
-      <span className="text-sm text-gray-500">
-        {label} <span className="text-xs text-brand-400">(수기)</span>
-      </span>
-      <EditableField value={value} onSave={onSave} />
-    </div>
-  );
-}
+// ─── 로컬 컴포넌트 ──────────────────────────────────────────────────────────
 
 function NetProfitRow({ value }: { value: number }) {
   return (
@@ -69,7 +42,7 @@ function NaverCard({
   onUpdate: (patch: object) => Promise<void>;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-warm-200 p-5">
+    <Card>
       <div className="flex items-center justify-between mb-4">
         <h4 className="font-semibold text-gray-900">네이버 스마트스토어</h4>
         <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
@@ -103,7 +76,7 @@ function NaverCard({
           </p>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -162,7 +135,7 @@ function CoupangCard({
   );
 
   return (
-    <div className="bg-white rounded-xl border border-warm-200 p-5">
+    <Card>
       <div className="flex items-center justify-between mb-4">
         <h4 className="font-semibold text-gray-900">쿠팡</h4>
         <div className="flex items-center gap-1.5">
@@ -212,7 +185,7 @@ function CoupangCard({
           </p>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -243,7 +216,7 @@ function OfflineCard({
   );
 
   return (
-    <div className="bg-white rounded-xl border border-warm-200 p-5">
+    <Card>
       <div className="flex items-center justify-between mb-4">
         <h4 className="font-semibold text-gray-900">{data.venueName}</h4>
         <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
@@ -290,7 +263,7 @@ function OfflineCard({
         summaryPrefix="전체"
         onSave={saveProducts}
       />
-    </div>
+    </Card>
   );
 }
 

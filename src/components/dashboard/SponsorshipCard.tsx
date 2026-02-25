@@ -2,31 +2,9 @@
 
 import { useCallback } from "react";
 import { SponsorshipData, SponsoredItem, ProductMatrixRow } from "@/lib/types";
-import EditableField from "./EditableField";
+import Card from "@/components/ui/Card";
+import EditRow from "@/components/ui/EditRow";
 import ProductQtyEditor from "./ProductQtyEditor";
-
-// ─── 마케팅 비용 EditRow ────────────────────────────────────────────────────
-
-function EditRow({
-  label,
-  value,
-  onSave,
-}: {
-  label: string;
-  value: number;
-  onSave: (v: number) => Promise<void>;
-}) {
-  return (
-    <div className="flex justify-between items-center py-1.5">
-      <span className="text-sm text-gray-500">
-        {label} <span className="text-xs text-brand-400">(수기)</span>
-      </span>
-      <EditableField value={value} onSave={onSave} />
-    </div>
-  );
-}
-
-// ─── 협찬 마케팅 카드 ───────────────────────────────────────────────────────
 
 interface Props {
   sponsorship: SponsorshipData;
@@ -52,7 +30,7 @@ export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }
   return (
     <section>
       <h3 className="text-lg font-semibold text-gray-800 mb-3">협찬 마케팅</h3>
-      <div className="bg-white rounded-xl border border-warm-200 p-5">
+      <Card>
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-gray-900">협찬 현황</h4>
           <span className="text-xs font-bold bg-warm-200 text-warm-700 px-2 py-0.5 rounded-full">
@@ -83,7 +61,7 @@ export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }
           summaryPrefix="총 제공량"
           onSave={saveItems}
         />
-      </div>
+      </Card>
     </section>
   );
 }

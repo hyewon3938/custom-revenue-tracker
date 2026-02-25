@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { ComponentType } from "react";
 import { MonthlyOverview } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 interface ChartProps {
   data: MonthlyOverview[];
@@ -35,9 +36,9 @@ export default function ChartsSection({ data }: ChartProps) {
       {CHARTS.map(({ title, Component }) => (
         <section key={title}>
           <h3 className="text-lg font-semibold text-gray-800 mb-3">{title}</h3>
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <Card>
             <Component data={data} />
-          </div>
+          </Card>
         </section>
       ))}
     </>

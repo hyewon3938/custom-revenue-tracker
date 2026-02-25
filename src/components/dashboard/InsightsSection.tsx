@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SalesInsight } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 const TYPE_CONFIG: Record<
   SalesInsight["type"],
@@ -60,12 +61,12 @@ export default function InsightsSection({ insights, onRegenerate }: Props) {
       </div>
 
       {insights.length === 0 ? (
-        <div className="bg-white rounded-xl border border-warm-200 py-12 text-center">
+        <Card className="py-12 text-center">
           <p className="text-sm text-gray-400">인사이트가 없습니다.</p>
           <p className="text-xs text-gray-300 mt-1">
             수기 데이터 입력 완료 후 &ldquo;생성&rdquo; 버튼을 눌러주세요.
           </p>
-        </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {insights.map((insight, idx) => {

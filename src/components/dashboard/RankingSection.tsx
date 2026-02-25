@@ -1,4 +1,5 @@
 import { ProductRankEntry } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 function RankBadge({ rank }: { rank: number }) {
   // 1위: 금메달, 2위: 은메달, 3위: 동메달(연한), 그 외: 연회색
@@ -28,7 +29,7 @@ function RankTable({
   showColumns?: boolean;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-warm-200 p-5">
+    <Card>
       <h4 className="font-semibold text-gray-800 mb-3">{title}</h4>
       {entries.length === 0 ? (
         <p className="text-sm text-gray-400 py-6 text-center">데이터 없음</p>
@@ -89,7 +90,7 @@ function RankTable({
           </tbody>
         </table>
       )}
-    </div>
+    </Card>
   );
 }
 

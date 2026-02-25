@@ -1,18 +1,9 @@
 import { OverallSummary } from "@/lib/types";
+import Card from "@/components/ui/Card";
+import Row from "@/components/ui/Row";
 import StatCard from "@/components/ui/StatCard";
 import KRWText from "@/components/ui/KRWText";
 import QtyText from "@/components/ui/QtyText";
-
-function CostRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex justify-between items-center py-1.5 border-b border-warm-100 last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-semibold text-gray-700">
-        <KRWText n={value} />
-      </span>
-    </div>
-  );
-}
 
 export default function OverallSummarySection({
   summary,
@@ -43,13 +34,13 @@ export default function OverallSummarySection({
 
       {/* 비용 내역 + 판매량 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-warm-200 p-5">
+        <Card>
           <p className="text-sm font-medium text-gray-700 mb-3">비용 내역</p>
-          <CostRow label="플랫폼 수수료" value={summary.totalCommissionFee} />
-          <CostRow label="물류비" value={summary.totalLogisticsFee} />
-          <CostRow label="광고비" value={summary.totalAdFee} />
+          <Row label="플랫폼 수수료" value={<KRWText n={summary.totalCommissionFee} />} />
+          <Row label="물류비" value={<KRWText n={summary.totalLogisticsFee} />} />
+          <Row label="광고비" value={<KRWText n={summary.totalAdFee} />} />
           {(summary.marketingCost ?? 0) > 0 && (
-            <CostRow label="마케팅 비용" value={summary.marketingCost} />
+            <Row label="마케팅 비용" value={<KRWText n={summary.marketingCost} />} />
           )}
           <div className="flex justify-between items-center pt-2 mt-1">
             <span className="text-sm font-semibold text-gray-700">합계</span>
@@ -64,31 +55,18 @@ export default function OverallSummarySection({
               />
             </span>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-xl border border-warm-200 p-5">
+        <Card>
           <p className="text-sm font-medium text-gray-700 mb-3">판매량</p>
-          <div>
-            <div className="flex justify-between items-center py-1.5 border-b border-warm-100">
-              <span className="text-sm text-gray-500">전체</span>
-              <span className="text-sm font-bold text-gray-900">
-                <QtyText n={summary.totalQuantity} />
-              </span>
-            </div>
-            <div className="flex justify-between items-center py-1.5 border-b border-warm-100">
-              <span className="text-sm text-gray-500">끈갈피</span>
-              <span className="text-sm font-semibold">
-                <QtyText n={summary.handmadeQuantity} />
-              </span>
-            </div>
-            <div className="flex justify-between items-center py-1.5">
-              <span className="text-sm text-gray-500">기타</span>
-              <span className="text-sm font-semibold">
-                <QtyText n={summary.otherQuantity} />
-              </span>
-            </div>
-          </div>
-        </div>
+          <Row
+            label="전체"
+            value={<QtyText n={summary.totalQuantity} />}
+            valueClassName="text-sm font-bold text-gray-900"
+          />
+          <Row label="끈갈피" value={<QtyText n={summary.handmadeQuantity} />} />
+          <Row label="기타" value={<QtyText n={summary.otherQuantity} />} border={false} />
+        </Card>
       </div>
     </section>
   );

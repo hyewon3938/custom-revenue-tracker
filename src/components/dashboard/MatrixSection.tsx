@@ -1,4 +1,5 @@
 import { ProductMatrixRow, SponsoredItem } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 interface Props {
   matrix: ProductMatrixRow[];
@@ -21,7 +22,7 @@ export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
       <h3 className="text-lg font-semibold text-gray-800 mb-3">
         상품 × 플랫폼 매트릭스
       </h3>
-      <div className="bg-white rounded-xl border border-warm-200 overflow-hidden">
+      <Card className="overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-warm-100 border-b border-warm-200">
@@ -83,7 +84,7 @@ export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
     </section>
   );
 }
