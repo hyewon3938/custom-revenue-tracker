@@ -54,8 +54,16 @@ export interface CoupangData {
   products: ProductSales[];
 }
 
-// ─── 오프라인 (고산의낮) 데이터 — 전체 수기 입력 ────────────────────────
+// ─── 오프라인 입점처 정보 (레지스트리) ────────────────────────────────────
+export interface VenueInfo {
+  id: string;        // slug 기반 고유 ID (예: "gosan")
+  name: string;      // 입점처명 (예: "고산의낮")
+  createdAt: string;  // ISO 8601
+}
+
+// ─── 오프라인 입점처 데이터 — 전체 수기 입력 ─────────────────────────────
 export interface OfflineData {
+  venueId: string;   // 입점처 레지스트리 ID 참조
   venueName: string; // 입점처명 (기본값: "고산의낮")
   revenue: number;
   totalQuantity: number;
@@ -174,7 +182,7 @@ export interface MonthlyReport {
   dataRange: { start: string; end: string }; // 수집 기간 (완전성 판단용)
   naver: NaverData;
   coupang: CoupangData;
-  offline: OfflineData;
+  offline: OfflineData[];
   sponsorship: SponsorshipData;       // 협찬 마케팅 데이터 (수기 입력)
   summary: OverallSummary;
   // 랭킹
