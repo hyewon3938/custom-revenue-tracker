@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit 2>&1)",
+      "Bash(node_modules/.bin/tsc --noEmit 2>&1)",
+      "Bash(npm install --silent 2>&1 | tail -5)",
+      "mcp__playwright__browser_evaluate"
+    ]
+  }
+}

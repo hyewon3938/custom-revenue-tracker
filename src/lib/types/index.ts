@@ -122,6 +122,34 @@ export interface SalesInsight {
   type: "positive" | "negative" | "neutral" | "action";
 }
 
+// ─── 인사이트 뷰용 집계 타입 ───────────────────────────────────────────────
+
+/** 전체 인사이트 뷰에서 사용하는 월별 집계 데이터 (차트 X축 단위) */
+export interface MonthlyOverview {
+  period: { year: number; month: number };
+  label: string;              // "2025.12" — 차트 X축 레이블
+  totalRevenue: number;
+  totalNetProfit: number;
+  totalQuantity: number;
+  handmadeQuantity: number;
+  otherQuantity: number;
+  marginRate: number;         // 소수점 1자리 % (서버에서 미리 계산)
+  naverRevenue: number;
+  coupangRevenue: number;
+  offlineRevenue: number;
+}
+
+/** GET /api/overview 응답 타입 */
+export interface OverviewResponse {
+  months: MonthlyOverview[];  // 오름차순 정렬 (차트 X축 좌→우)
+  totals: {
+    totalQuantity: number;
+    handmadeQuantity: number;
+    totalRevenue: number;
+    totalNetProfit: number;
+  };
+}
+
 // ─── 월별 종합 레포트 (저장/편집 단위) ───────────────────────────────────
 export interface MonthlyReport {
   period: { year: number; month: number };

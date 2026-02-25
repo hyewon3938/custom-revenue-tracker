@@ -1,6 +1,6 @@
 import { Page } from "playwright";
 import { ShippingStats } from "@/lib/types";
-import { NAVER_BASE, NAVER_URLS, getFrameByUrl } from "./naver-auth";
+import { NAVER_URLS, getFrameByUrl } from "./naver-auth";
 import { selectMonthRangeAndSearch } from "./naver-datepicker";
 
 export interface NaverSalesResult {
