@@ -1,11 +1,19 @@
-import { ProductMatrixRow } from "@/lib/types";
+import { ProductMatrixRow, SponsoredItem } from "@/lib/types";
 
 interface Props {
   matrix: ProductMatrixRow[];
+  sponsoredItems?: SponsoredItem[];
 }
 
-export default function MatrixSection({ matrix }: Props) {
-  const visibleRows = matrix.filter((row) => row.total > 0);
+export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
+  const sponsoredMap = new Map(sponsoredItems.map((i) => [i.productName, i.quantity]));
+  const hasSponsorship = sponsoredItems.length > 0;
+
+  // 판매량이 있거나 협찬 수량이 있는 행만 표시
+  const visibleRows = matrix.filter(
+    (row) => row.total > 0 || (sponsoredMap.get(row.productName) ?? 0) > 0
+  );
+
   if (visibleRows.length === 0) return null;
 
   return (
@@ -29,49 +37,50 @@ export default function MatrixSection({ matrix }: Props) {
               <th className="text-right px-4 py-3 font-medium text-gray-500">
                 오프라인
               </th>
+              {hasSponsorship && (
+                <th className="text-right px-4 py-3 font-medium text-pink-400">
+                  협찬
+                </th>
+              )}
               <th className="text-right px-4 py-3 font-medium text-gray-500">
                 합계
               </th>
             </tr>
           </thead>
           <tbody>
-            {visibleRows.map((row, idx) => (
-              <tr
-                key={row.productName}
-                className={`border-b border-gray-50 last:border-0 ${idx % 2 === 1 ? "bg-gray-50/40" : "bg-white"}`}
-              >
-                <td className="px-4 py-2.5">
-                  <span className="text-gray-800">{row.productName}</span>
-                  {row.category === "handmade" && (
-                    <span className="ml-2 text-xs text-blue-400">끈갈피</span>
+            {visibleRows.map((row, idx) => {
+              const sponsored = sponsoredMap.get(row.productName) ?? 0;
+              return (
+                <tr
+                  key={row.productName}
+                  className={`border-b border-gray-50 last:border-0 ${idx % 2 === 1 ? "bg-gray-50/40" : "bg-white"}`}
+                >
+                  <td className="px-4 py-2.5">
+                    <span className="text-gray-800">{row.productName}</span>
+                    {row.category === "handmade" && (
+                      <span className="ml-2 text-xs text-blue-400">끈갈피</span>
+                    )}
+                  </td>
+                  <td className="text-right px-4 py-2.5 text-gray-600">
+                    {row.naver > 0 ? row.naver : <span className="text-gray-200">—</span>}
+                  </td>
+                  <td className="text-right px-4 py-2.5 text-gray-600">
+                    {row.coupang > 0 ? row.coupang : <span className="text-gray-200">—</span>}
+                  </td>
+                  <td className="text-right px-4 py-2.5 text-gray-600">
+                    {row.offline > 0 ? row.offline : <span className="text-gray-200">—</span>}
+                  </td>
+                  {hasSponsorship && (
+                    <td className="text-right px-4 py-2.5 text-pink-500">
+                      {sponsored > 0 ? sponsored : <span className="text-gray-200">—</span>}
+                    </td>
                   )}
-                </td>
-                <td className="text-right px-4 py-2.5 text-gray-600">
-                  {row.naver > 0 ? (
-                    row.naver
-                  ) : (
-                    <span className="text-gray-200">—</span>
-                  )}
-                </td>
-                <td className="text-right px-4 py-2.5 text-gray-600">
-                  {row.coupang > 0 ? (
-                    row.coupang
-                  ) : (
-                    <span className="text-gray-200">—</span>
-                  )}
-                </td>
-                <td className="text-right px-4 py-2.5 text-gray-600">
-                  {row.offline > 0 ? (
-                    row.offline
-                  ) : (
-                    <span className="text-gray-200">—</span>
-                  )}
-                </td>
-                <td className="text-right px-4 py-2.5 font-semibold text-gray-900">
-                  {row.total}
-                </td>
-              </tr>
-            ))}
+                  <td className="text-right px-4 py-2.5 font-semibold text-gray-900">
+                    {row.total}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

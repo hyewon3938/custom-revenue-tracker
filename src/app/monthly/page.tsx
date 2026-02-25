@@ -242,7 +242,10 @@ export default function MonthlyPage() {
             sponsorExcludedRanking={report.sponsorExcludedRanking}
           />
 
-          <MatrixSection matrix={report.productMatrix} />
+          <MatrixSection
+            matrix={report.productMatrix}
+            sponsoredItems={report.sponsorship?.items}
+          />
 
           <InsightsSection
             insights={report.insights}

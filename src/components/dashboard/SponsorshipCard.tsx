@@ -82,7 +82,6 @@ export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }
           totalQuantity={sponsorship.totalQuantity}
           handmadeQuantity={sponsorship.handmadeQuantity}
           summaryPrefix="총 제공량"
-          showSummaryList
           onSave={saveItems}
         />
       </div>
