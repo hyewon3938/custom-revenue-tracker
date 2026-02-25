@@ -37,6 +37,7 @@ next-env.d.ts
 # playwright
 /playwright-report/
 /test-results/
+/.playwright-mcp/
 
 # 브라우저 세션 (로그인 상태 저장 - 절대 커밋하지 말 것)
 /.browser-session/
@@ -49,3 +50,6 @@ next-env.d.ts
 
 # 테스트 스크린샷
 /scripts/*.png
+
+# 이전 프로젝트명 잔여물
+/leecommit-sales-dashboard/
