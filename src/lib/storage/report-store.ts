@@ -120,11 +120,7 @@ export async function updateReport(
     ? deepMerge(existing.coupang, updates.coupang)
     : existing.coupang;
 
-  // coupang.products가 교체됐으면 수량 합계 자동 재계산
-  const coupang: CoupangData =
-    updates.coupang?.products !== undefined
-      ? { ...coupangMerged, ...calcQuantitySummary(coupangMerged.products) }
-      : coupangMerged;
+  const coupang: CoupangData = coupangMerged;
 
   // ─── 오프라인 다중 입점처 처리 ────────────────────────────────────────
   let offlineVenues: OfflineData[] = [...existing.offline];
@@ -156,44 +152,45 @@ export async function updateReport(
 
   // 특정 입점처 데이터 수정
   if (updates.offline && updates.offlineVenueId) {
-    const offlineCommissionPerItem = parseInt(
-      process.env.OFFLINE_COMMISSION_PER_ITEM ?? "0"
-    );
-
     offlineVenues = offlineVenues.map((venue) => {
       if (venue.venueId !== updates.offlineVenueId) return venue;
 
       const merged = deepMerge(venue, updates.offline!);
 
-      // products가 교체됐으면 수량 합계 + 입점 수수료 자동 재계산
+      // products가 교체됐으면 수량 합계 자동 재계산
       if (updates.offline!.products !== undefined) {
-        const qtySummary = calcQuantitySummary(merged.products);
-        return {
-          ...merged,
-          ...qtySummary,
-          fees: {
-            ...merged.fees,
-            commissionFee: qtySummary.totalQuantity * offlineCommissionPerItem,
-          },
-        };
+        const { products, ...qtySummary } = reclassifyAndSummarize(merged.products);
+        return { ...merged, products, ...qtySummary };
       }
       return merged;
     });
   }
 
-  // 각 입점처별 이익 재계산
-  const offlineWithProfit: OfflineData[] = offlineVenues.map((v) => ({
-    ...v,
-    profit: calcOfflineProfit(v.revenue, v.fees),
-  }));
+  // 제품 카테고리 재분류 (독서링 등 기타 상품 보정) + 수량 재계산
+  const naverReclassified = reclassifyAndSummarize(naver.products);
+  const coupangReclassified = reclassifyAndSummarize(coupang.products);
 
-  // 플랫폼 데이터 이익 재계산
+  // 각 입점처별 카테고리 재분류 + 이익 재계산
+  const offlineWithProfit: OfflineData[] = offlineVenues.map((v) => {
+    const { products, ...qtySummary } = reclassifyAndSummarize(v.products);
+    return { ...v, products, ...qtySummary, profit: calcOfflineProfit(v.revenue, v.fees, v.venueId) };
+  });
+
+  // 플랫폼 데이터 카테고리 반영 + 이익 재계산
   const naverWithProfit: NaverData = {
     ...naver,
+    products: naverReclassified.products,
+    totalQuantity: naverReclassified.totalQuantity,
+    handmadeQuantity: naverReclassified.handmadeQuantity,
+    otherQuantity: naverReclassified.otherQuantity,
     profit: calcOnlineProfit(naver.revenue, naver.fees),
   };
   const coupangWithProfit: CoupangData = {
     ...coupang,
+    products: coupangReclassified.products,
+    totalQuantity: coupangReclassified.totalQuantity,
+    handmadeQuantity: coupangReclassified.handmadeQuantity,
+    otherQuantity: coupangReclassified.otherQuantity,
     profit: calcOnlineProfit(coupang.revenue, coupang.fees),
   };
 
@@ -311,14 +308,28 @@ export async function loadRecentHistory(
 
 // ─── 유틸 ──────────────────────────────────────────────────────────────────
 
-/** products 배열에서 총·끈갈피·기타 수량 합계를 계산 */
-function calcQuantitySummary(products: ProductSales[]) {
+/** 상품명으로 카테고리 자동 판별 (끈갈피 = handmade, 독서링 = other) */
+function detectCategory(productName: string): "handmade" | "other" {
+  if (productName.includes("독서링")) return "other";
+  const handmadeKeywords = ["끈갈피", "북마크"];
+  return handmadeKeywords.some((kw) => productName.includes(kw))
+    ? "handmade"
+    : "other";
+}
+
+/** products 배열에서 카테고리를 재분류하고 수량 합계를 계산 */
+function reclassifyAndSummarize(products: ProductSales[]) {
+  const reclassified = products.map((p) => ({
+    ...p,
+    category: detectCategory(p.productName),
+  }));
   return {
-    totalQuantity: products.reduce((s, p) => s + p.quantity, 0),
-    handmadeQuantity: products
+    products: reclassified,
+    totalQuantity: reclassified.reduce((s, p) => s + p.quantity, 0),
+    handmadeQuantity: reclassified
       .filter((p) => p.category === "handmade")
       .reduce((s, p) => s + p.quantity, 0),
-    otherQuantity: products
+    otherQuantity: reclassified
       .filter((p) => p.category === "other")
       .reduce((s, p) => s + p.quantity, 0),
   };
