@@ -5,7 +5,6 @@ import {
   CoupangData,
   OfflineData,
   PlatformFees,
-  ShippingStats,
 } from "@/lib/types";
 import { loginNaver } from "./naver-auth";
 import { loginCoupang } from "./coupang-auth";
@@ -16,8 +15,10 @@ import { scrapeNaverSettlement } from "./naver-settlement";
 import { scrapeCoupangSalesAnalysis } from "./coupang-sales";
 import { scrapeCoupangSettlement } from "./coupang-settlement";
 import {
-  calcOnlineProfit,
-  calcOfflineProfit,
+  calcPlatformProfit,
+  calcNaverShippingStats,
+  naverMaterialBase,
+  coupangMaterialBase,
   calcOverallSummary,
   calcPlatformRanking,
   calcOverallRanking,
@@ -31,12 +32,6 @@ const EMPTY_FEES: PlatformFees = {
   logisticsFee: 0,
   commissionFee: 0,
   adFee: 0,
-};
-
-const EMPTY_SHIPPING_STATS: ShippingStats = {
-  regularCount: 0,
-  freeCount: 0,
-  sellerCost: 0,
 };
 
 const BROWSER_UA =
@@ -118,11 +113,13 @@ async function collectNaverData(
     );
 
     const revenue = salesResult?.totalRevenue ?? 0;
-    const shippingStats = salesResult?.shippingStats ?? EMPTY_SHIPPING_STATS;
+    const shippingCollected = salesResult?.shippingCollected ?? 0;
+    const payerCount = salesResult?.payerCount ?? 0;
+    const shippingStats = calcNaverShippingStats(shippingCollected, payerCount);
     const fees: PlatformFees = {
       commissionFee: settlementResult?.commissionFee ?? 0,
-      logisticsFee: shippingStats.sellerCost, // 네이버 물류비 = 판매자 부담 배송비
-      adFee: 0, // 수기 입력
+      logisticsFee: shippingStats.sellerCost,
+      adFee: 0,
       settlementAmount: settlementResult?.settlementAmount ?? 0,
     };
     const products = productsResult ?? [];
@@ -133,12 +130,16 @@ async function collectNaverData(
 
     return {
       revenue,
+      shippingCollected,
+      payerCount,
       totalQuantity,
       handmadeQuantity,
       otherQuantity: totalQuantity - handmadeQuantity,
       fees,
       shippingStats,
-      profit: calcOnlineProfit(revenue, fees),
+      profit: calcPlatformProfit(
+        revenue, fees, naverMaterialBase(revenue, shippingCollected)
+      ),
       products,
     };
   } finally {
@@ -183,7 +184,9 @@ async function collectCoupangData(
       handmadeQuantity,
       otherQuantity: totalQuantity - handmadeQuantity,
       fees,
-      profit: calcOnlineProfit(revenue, fees),
+      profit: calcPlatformProfit(
+        revenue, fees, coupangMaterialBase(revenue, totalQuantity)
+      ),
       products,
     };
   } finally {
@@ -217,7 +220,7 @@ export async function collectMonthlyData(
       handmadeQuantity: 0,
       otherQuantity: 0,
       fees: offlineFees,
-      profit: calcOfflineProfit(0, offlineFees, "gosan"),
+      profit: calcPlatformProfit(0, offlineFees, 0, "OFFLINE_MATERIAL_RATE"),
       products: [],
     },
   ];

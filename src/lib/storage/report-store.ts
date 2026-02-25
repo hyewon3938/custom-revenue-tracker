@@ -9,8 +9,11 @@ import {
   SponsorshipData,
 } from "@/lib/types";
 import {
-  calcOnlineProfit,
-  calcOfflineProfit,
+  calcPlatformProfit,
+  calcNaverShippingStats,
+  naverMaterialBase,
+  coupangMaterialBase,
+  gosanMaterialBase,
   calcOverallSummary,
   calcPlatformRanking,
   calcOverallRanking,
@@ -52,13 +55,19 @@ export async function saveReport(report: MonthlyReport): Promise<void> {
   );
 }
 
-/** 기존 레포트 마이그레이션: offline 단일 객체 → 배열 변환 */
+/** 기존 레포트 마이그레이션 */
 function migrateReport(raw: Record<string, unknown>): MonthlyReport {
   // offline이 배열이 아닌 경우 (구버전) → 배열로 래핑
   if (raw.offline && !Array.isArray(raw.offline)) {
     const single = raw.offline as Record<string, unknown>;
     if (!single.venueId) single.venueId = "gosan";
     raw.offline = [single];
+  }
+  // NaverData에 shippingCollected/payerCount 없는 경우 기본값 추가
+  const naver = raw.naver as Record<string, unknown> | undefined;
+  if (naver) {
+    if (naver.shippingCollected === undefined) naver.shippingCollected = 0;
+    if (naver.payerCount === undefined) naver.payerCount = 0;
   }
   return raw as unknown as MonthlyReport;
 }
@@ -173,25 +182,47 @@ export async function updateReport(
   // 각 입점처별 카테고리 재분류 + 이익 재계산
   const offlineWithProfit: OfflineData[] = offlineVenues.map((v) => {
     const { products, ...qtySummary } = reclassifyAndSummarize(v.products);
-    return { ...v, products, ...qtySummary, profit: calcOfflineProfit(v.revenue, v.fees, v.venueId) };
+    const matBase = v.venueId === "gosan"
+      ? gosanMaterialBase(v.revenue, v.fees.commissionFee)
+      : v.revenue;
+    return {
+      ...v, products, ...qtySummary,
+      profit: calcPlatformProfit(v.revenue, v.fees, matBase, "OFFLINE_MATERIAL_RATE"),
+    };
   });
 
-  // 플랫폼 데이터 카테고리 반영 + 이익 재계산
+  // 네이버: shippingStats + logisticsFee를 원본 데이터에서 매번 재계산
+  const naverShippingStats = calcNaverShippingStats(
+    naver.shippingCollected ?? 0,
+    naver.payerCount ?? 0
+  );
+  const naverFees = { ...naver.fees, logisticsFee: naverShippingStats.sellerCost, adFee: 0 };
   const naverWithProfit: NaverData = {
     ...naver,
+    fees: naverFees,
+    shippingStats: naverShippingStats,
     products: naverReclassified.products,
     totalQuantity: naverReclassified.totalQuantity,
     handmadeQuantity: naverReclassified.handmadeQuantity,
     otherQuantity: naverReclassified.otherQuantity,
-    profit: calcOnlineProfit(naver.revenue, naver.fees),
+    profit: calcPlatformProfit(
+      naver.revenue, naverFees,
+      naverMaterialBase(naver.revenue, naver.shippingCollected ?? 0)
+    ),
   };
+
+  // 쿠팡: 배송 마크업 제외한 정가 기준 부자재비
+  const coupangTotalQty = coupangReclassified.totalQuantity;
   const coupangWithProfit: CoupangData = {
     ...coupang,
     products: coupangReclassified.products,
-    totalQuantity: coupangReclassified.totalQuantity,
+    totalQuantity: coupangTotalQty,
     handmadeQuantity: coupangReclassified.handmadeQuantity,
     otherQuantity: coupangReclassified.otherQuantity,
-    profit: calcOnlineProfit(coupang.revenue, coupang.fees),
+    profit: calcPlatformProfit(
+      coupang.revenue, coupang.fees,
+      coupangMaterialBase(coupang.revenue, coupangTotalQty)
+    ),
   };
 
   // 협찬 데이터 병합

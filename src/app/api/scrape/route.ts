@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { collectMonthlyData } from "@/lib/scrapers";
 import { loadReport, saveReport } from "@/lib/storage/report-store";
 import {
-  calcOnlineProfit,
-  calcOfflineProfit,
+  calcPlatformProfit,
+  calcNaverShippingStats,
+  naverMaterialBase,
+  gosanMaterialBase,
   calcOverallSummary,
   calcPlatformRanking,
   calcOverallRanking,
@@ -19,7 +21,7 @@ import { loadProductMapping } from "@/lib/storage/mapping-store";
  * body: { year?: number, month?: number }
  *   생략 시 현재 연/월 사용
  *
- * 재수집 시 수기 입력 데이터(오프라인 전체, 네이버 광고비)는 보존되며,
+ * 재수집 시 수기 입력 데이터(오프라인 전체, 협찬)는 보존되며,
  * 보존된 데이터를 반영해 파생 필드(profit·summary·ranking·matrix)를 재계산합니다.
  *
  * 응답: 저장된 MonthlyReport
@@ -43,12 +45,10 @@ export async function POST(request: NextRequest) {
 
     // 2) 재수집인 경우 수기 입력 데이터 보존 후 파생 필드 재계산
     //    - offline: 전체 (매출·비용·상품별 수량 모두 수기 입력)
-    //    - naver.fees.adFee: 수기 입력
     //    - sponsorship: 협찬 마케팅 데이터 (수기 입력)
     const existing = await loadReport(year, month);
     if (existing) {
       reportData.offline = existing.offline; // 배열 보존
-      reportData.naver.fees.adFee = existing.naver.fees.adFee;
       reportData.sponsorship = existing.sponsorship ?? {
         items: [],
         marketingCost: 0,
@@ -56,16 +56,28 @@ export async function POST(request: NextRequest) {
         handmadeQuantity: 0,
       };
 
-      // 보존된 데이터로 파생 필드 재계산
-      reportData.naver.profit = calcOnlineProfit(
+      // 네이버 배송비 재계산
+      const naverShipping = calcNaverShippingStats(
+        reportData.naver.shippingCollected,
+        reportData.naver.payerCount
+      );
+      reportData.naver.fees.logisticsFee = naverShipping.sellerCost;
+      reportData.naver.shippingStats = naverShipping;
+      reportData.naver.profit = calcPlatformProfit(
         reportData.naver.revenue,
-        reportData.naver.fees
+        reportData.naver.fees,
+        naverMaterialBase(reportData.naver.revenue, reportData.naver.shippingCollected)
       );
       // 각 입점처별 이익 재계산
-      reportData.offline = reportData.offline.map((v) => ({
-        ...v,
-        profit: calcOfflineProfit(v.revenue, v.fees, v.venueId),
-      }));
+      reportData.offline = reportData.offline.map((v) => {
+        const matBase = v.venueId === "gosan"
+          ? gosanMaterialBase(v.revenue, v.fees.commissionFee)
+          : v.revenue;
+        return {
+          ...v,
+          profit: calcPlatformProfit(v.revenue, v.fees, matBase, "OFFLINE_MATERIAL_RATE"),
+        };
+      });
 
       const mapping = await loadProductMapping();
       const marketingCost = reportData.sponsorship.marketingCost;
