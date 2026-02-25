@@ -68,7 +68,8 @@ export function calcOverallSummary(
   naver: NaverData,
   coupang: CoupangData,
   offlineVenues: OfflineData[],
-  marketingCost: number = 0
+  marketingCost: number = 0,
+  sponsoredItems: SponsoredItem[] = []
 ): OverallSummary {
   const offRevenue = offlineVenues.reduce((s, v) => s + v.revenue, 0);
   const offCommission = offlineVenues.reduce((s, v) => s + v.fees.commissionFee, 0);
@@ -81,6 +82,17 @@ export function calcOverallSummary(
   const offHandmade = offlineVenues.reduce((s, v) => s + v.handmadeQuantity, 0);
   const offOther = offlineVenues.reduce((s, v) => s + v.otherQuantity, 0);
 
+  // 협찬 수량 차감 — 협찬 끈갈피는 네이버 구매로 잡히지만 실고객 판매가 아님
+  const sponsoredTotal = sponsoredItems.reduce((s, i) => s + i.quantity, 0);
+  const sponsoredHandmade = sponsoredItems
+    .filter((i) => i.category === "handmade")
+    .reduce((s, i) => s + i.quantity, 0);
+  const sponsoredOther = sponsoredTotal - sponsoredHandmade;
+
+  const rawTotal = naver.totalQuantity + coupang.totalQuantity + offTotal;
+  const rawHandmade = naver.handmadeQuantity + coupang.handmadeQuantity + offHandmade;
+  const rawOther = naver.otherQuantity + coupang.otherQuantity + offOther;
+
   return {
     totalRevenue: naver.revenue + coupang.revenue + offRevenue,
     totalCommissionFee: naver.fees.commissionFee + coupang.fees.commissionFee + offCommission,
@@ -90,10 +102,82 @@ export function calcOverallSummary(
     totalMaterialCost: naver.profit.materialCost + coupang.profit.materialCost + offMaterial,
     marketingCost,
     totalNetProfit: naver.profit.netProfit + coupang.profit.netProfit + offNetProfit - marketingCost,
-    totalQuantity: naver.totalQuantity + coupang.totalQuantity + offTotal,
-    handmadeQuantity: naver.handmadeQuantity + coupang.handmadeQuantity + offHandmade,
-    otherQuantity: naver.otherQuantity + coupang.otherQuantity + offOther,
+    totalQuantity: Math.max(0, rawTotal - sponsoredTotal),
+    handmadeQuantity: Math.max(0, rawHandmade - sponsoredHandmade),
+    otherQuantity: Math.max(0, rawOther - sponsoredOther),
   };
+}
+
+// ─── 상품명 → canonical 해석 ─────────────────────────────────────────────
+
+const PRODUCT_STOP_WORDS = new Set([
+  "끈갈피", "책갈피", "비즈", "북마크", "끈", "북클립",
+  "선물", "독서모임", "책선물", "독서템", "독서용품", "독서",
+  "리커밋", "맞춤제작", "handmade",
+]);
+
+function extractKeywords(name: string): Set<string> {
+  const cleaned = name
+    .replace(/\[.*?\]/g, "")
+    .replace(/[^\uAC00-\uD7A3a-zA-Z\s]/g, " ")
+    .toLowerCase()
+    .trim();
+  return new Set(
+    cleaned.split(/\s+/).filter((w) => w.length > 0 && !PRODUCT_STOP_WORDS.has(w))
+  );
+}
+
+function keywordOverlap(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  const intersection = [...a].filter((x) => b.has(x)).length;
+  const union = new Set([...a, ...b]).size;
+  return intersection / union;
+}
+
+/**
+ * 상품명 → canonical명 해석.
+ * 네이버/쿠팡: 등록된 플랫폼 상품명 정확 매칭.
+ * 오프라인 (수기 입력):
+ *   1) canonical 정확 매칭
+ *   2) naver/coupang 필드 매칭
+ *   3) 키워드 유사도 매칭 (threshold 0.5)
+ */
+function toCanonical(
+  name: string,
+  platform: Platform | undefined,
+  mapping: ProductMappingConfig | null
+): string {
+  if (!mapping) return name;
+
+  if (platform === "naver") {
+    return mapping.mappings.find((m) => m.naver === name)?.canonical ?? name;
+  }
+  if (platform === "coupang") {
+    return mapping.mappings.find((m) => m.coupang === name)?.canonical ?? name;
+  }
+
+  // offline (수기 입력): 단계별 매칭
+  const exact = mapping.mappings.find((m) => m.canonical === name);
+  if (exact) return exact.canonical;
+
+  const cross = mapping.mappings.find((m) => m.naver === name || m.coupang === name);
+  if (cross) return cross.canonical;
+
+  const kw = extractKeywords(name);
+  if (kw.size > 0) {
+    let bestScore = 0;
+    let bestCanonical = name;
+    for (const m of mapping.mappings) {
+      const score = keywordOverlap(kw, extractKeywords(m.canonical));
+      if (score > bestScore) {
+        bestScore = score;
+        bestCanonical = m.canonical;
+      }
+    }
+    if (bestScore >= 0.5) return bestCanonical;
+  }
+
+  return name;
 }
 
 // ─── 랭킹 계산 ────────────────────────────────────────────────────────────
@@ -106,23 +190,10 @@ export function calcPlatformRanking(
 ): ProductRankEntry[] {
   const platform = products[0]?.platform;
 
-  // canonical명 결정 — mapping 있을 때만 적용
-  const toCanonical = (name: string): string => {
-    if (!mapping) return name;
-    const m = mapping.mappings.find((m) =>
-      platform === "naver"
-        ? m.naver === name
-        : platform === "coupang"
-        ? m.coupang === name
-        : m.canonical === name
-    );
-    return m?.canonical ?? name;
-  };
-
   // canonical명 기준으로 합산
   const map = new Map<string, { qty: number; rawName: string }>();
   for (const p of products) {
-    const key = toCanonical(p.productName);
+    const key = toCanonical(p.productName, platform, mapping);
     const existing = map.get(key);
     if (!existing) {
       map.set(key, { qty: p.quantity, rawName: p.productName });
@@ -160,19 +231,6 @@ export function calcOverallRanking(
   mapping: ProductMappingConfig | null,
   topN: number
 ): ProductRankEntry[] {
-  // canonical명 결정 함수
-  const toCanonical = (name: string, platform: Platform): string => {
-    if (!mapping) return name;
-    const m = mapping.mappings.find((m) =>
-      platform === "naver"
-        ? m.naver === name
-        : platform === "coupang"
-        ? m.coupang === name
-        : m.canonical === name
-    );
-    return m?.canonical ?? name;
-  };
-
   const map = new Map<
     string,
     { category: ProductCategory; naver: number; coupang: number; offline: number }
@@ -180,7 +238,7 @@ export function calcOverallRanking(
 
   const add = (products: ProductSales[], platform: Platform) => {
     for (const p of products) {
-      const key = toCanonical(p.productName, platform);
+      const key = toCanonical(p.productName, platform, mapping);
       const existing = map.get(key);
       if (!existing) {
         map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
@@ -223,18 +281,6 @@ export function calcSponsorExcludedRanking(
   mapping: ProductMappingConfig | null,
   topN: number
 ): ProductRankEntry[] {
-  const toCanonical = (name: string, platform: Platform): string => {
-    if (!mapping) return name;
-    const m = mapping.mappings.find((m) =>
-      platform === "naver"
-        ? m.naver === name
-        : platform === "coupang"
-        ? m.coupang === name
-        : m.canonical === name
-    );
-    return m?.canonical ?? name;
-  };
-
   const map = new Map<
     string,
     { category: ProductCategory; naver: number; coupang: number; offline: number }
@@ -242,7 +288,7 @@ export function calcSponsorExcludedRanking(
 
   const add = (products: ProductSales[], platform: Platform) => {
     for (const p of products) {
-      const key = toCanonical(p.productName, platform);
+      const key = toCanonical(p.productName, platform, mapping);
       if (!map.has(key)) {
         map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
       }
@@ -285,20 +331,9 @@ export function calcProductMatrix(
   naver: ProductSales[],
   coupang: ProductSales[],
   offline: ProductSales[],
-  mapping: ProductMappingConfig | null
+  mapping: ProductMappingConfig | null,
+  sponsoredItems: SponsoredItem[] = []
 ): ProductMatrixRow[] {
-  const toCanonical = (name: string, platform: Platform): string => {
-    if (!mapping) return name;
-    const m = mapping.mappings.find((m) =>
-      platform === "naver"
-        ? m.naver === name
-        : platform === "coupang"
-        ? m.coupang === name
-        : m.canonical === name
-    );
-    return m?.canonical ?? name;
-  };
-
   const map = new Map<
     string,
     { category: ProductCategory; naver: number; coupang: number; offline: number }
@@ -316,7 +351,7 @@ export function calcProductMatrix(
 
   const add = (products: ProductSales[], platform: Platform) => {
     for (const p of products) {
-      const key = toCanonical(p.productName, platform);
+      const key = toCanonical(p.productName, platform, mapping);
       if (!map.has(key)) {
         map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
       }
@@ -331,15 +366,22 @@ export function calcProductMatrix(
   add(coupang, "coupang");
   add(offline, "offline");
 
+  // 협찬 수량 차감 — 협찬 끈갈피는 네이버 판매로 잡히지만 실고객 판매가 아님
+  const sponsoredMap = new Map(sponsoredItems.map((i) => [i.productName, i.quantity]));
+
   return Array.from(map.entries())
-    .map(([name, v]) => ({
-      productName: name,
-      category: v.category,
-      naver: v.naver,
-      coupang: v.coupang,
-      offline: v.offline,
-      total: v.naver + v.coupang + v.offline,
-    }))
+    .map(([name, v]) => {
+      const sponsored = sponsoredMap.get(name) ?? 0;
+      const adjustedNaver = Math.max(0, v.naver - sponsored);
+      return {
+        productName: name,
+        category: v.category,
+        naver: adjustedNaver,
+        coupang: v.coupang,
+        offline: v.offline,
+        total: adjustedNaver + v.coupang + v.offline,
+      };
+    })
     .sort((a, b) => b.total - a.total);
 }
 

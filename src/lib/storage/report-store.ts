@@ -18,6 +18,7 @@ import {
   calcSponsorExcludedRanking,
 } from "@/lib/calculations/profit";
 import { loadProductMapping } from "@/lib/storage/mapping-store";
+import { getPrevMonth } from "@/lib/utils/format";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
 
@@ -202,17 +203,19 @@ export async function updateReport(
     ? deepMerge(existingSponsorship, updates.sponsorship)
     : existingSponsorship;
 
-  // items가 교체됐으면 수량 합계 자동 재계산
-  const sponsorship: SponsorshipData =
-    updates.sponsorship?.items !== undefined
-      ? {
-          ...sponsorshipMerged,
-          totalQuantity: sponsorshipMerged.items.reduce((s, i) => s + i.quantity, 0),
-          handmadeQuantity: sponsorshipMerged.items
-            .filter((i) => i.category === "handmade")
-            .reduce((s, i) => s + i.quantity, 0),
-        }
-      : sponsorshipMerged;
+  // items가 교체됐으면 수량 합계 + 마케팅 비용 자동 재계산
+  const sponsorship: SponsorshipData = (() => {
+    if (updates.sponsorship?.items === undefined) return sponsorshipMerged;
+
+    const totalQuantity = sponsorshipMerged.items.reduce((s, i) => s + i.quantity, 0);
+    const handmadeQuantity = sponsorshipMerged.items
+      .filter((i) => i.category === "handmade")
+      .reduce((s, i) => s + i.quantity, 0);
+    const costPerHandmade = parseInt(process.env.REVIEW_MARKETING_COST_PER_HANDMADE ?? "0");
+    const marketingCost = handmadeQuantity * costPerHandmade;
+
+    return { ...sponsorshipMerged, totalQuantity, handmadeQuantity, marketingCost };
+  })();
 
   const mapping = await loadProductMapping();
 
@@ -223,7 +226,8 @@ export async function updateReport(
     naverWithProfit,
     coupangWithProfit,
     offlineWithProfit,
-    sponsorship.marketingCost
+    sponsorship.marketingCost,
+    sponsorship.items
   );
   const naverRanking = calcPlatformRanking(naverWithProfit.products, 3, mapping);
   const coupangRanking = calcPlatformRanking(coupangWithProfit.products, 3, mapping);
@@ -247,7 +251,8 @@ export async function updateReport(
     naverWithProfit.products,
     coupangWithProfit.products,
     allOfflineProducts,
-    mapping
+    mapping,
+    sponsorship.items
   );
 
   const updated: MonthlyReport = {
@@ -286,6 +291,24 @@ export async function listReports(): Promise<
     .sort((a, b) =>
       a.year !== b.year ? b.year - a.year : b.month - a.month
     );
+}
+
+/** 최근 N개월 히스토리 로드 (인사이트 생성용) — [전달, 전전달, ...] 순 */
+export async function loadRecentHistory(
+  year: number,
+  month: number,
+  count: number
+): Promise<(MonthlyReport | null)[]> {
+  const results: (MonthlyReport | null)[] = [];
+  let y = year,
+    m = month;
+  for (let i = 0; i < count; i++) {
+    const prev = getPrevMonth(y, m);
+    y = prev.year;
+    m = prev.month;
+    results.push(await loadReport(y, m));
+  }
+  return results;
 }
 
 // ─── 유틸 ──────────────────────────────────────────────────────────────────

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collectMonthlyData } from "@/lib/scrapers";
 import { loadReport, saveReport } from "@/lib/storage/report-store";
-import { generateSalesInsights } from "@/lib/ai/insights";
 import {
   calcOnlineProfit,
   calcOfflineProfit,
@@ -76,7 +75,8 @@ export async function POST(request: NextRequest) {
         reportData.naver,
         reportData.coupang,
         reportData.offline,
-        marketingCost
+        marketingCost,
+        reportData.sponsorship.items
       );
       reportData.offlineRanking = calcPlatformRanking(
         allOfflineProducts,
@@ -102,19 +102,17 @@ export async function POST(request: NextRequest) {
         reportData.naver.products,
         reportData.coupang.products,
         allOfflineProducts,
-        mapping
+        mapping,
+        reportData.sponsorship.items
       );
     }
 
-    // 3) AI 인사이트 생성 (API 키 없거나 실패해도 빈 배열로 저장)
-    let insights: Awaited<ReturnType<typeof generateSalesInsights>> = [];
-    try {
-      insights = await generateSalesInsights(reportData);
-    } catch (insightErr) {
-      console.warn("[scrape] 인사이트 생성 실패 (데이터는 저장됩니다):", insightErr);
-    }
-
-    const report = { ...reportData, insights };
+    // 3) 인사이트는 사용자가 수기 데이터 입력 후 직접 생성 (POST /api/insights)
+    //    기존 인사이트가 있으면 보존, 없으면 빈 배열
+    const report = {
+      ...reportData,
+      insights: existing?.insights ?? [],
+    };
 
     // 4) 파일 저장
     await saveReport(report);
