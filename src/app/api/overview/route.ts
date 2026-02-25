@@ -35,7 +35,7 @@ export async function GET() {
             : 0,
         naverRevenue: r.naver.revenue,
         coupangRevenue: r.coupang.revenue,
-        offlineRevenue: r.offline.revenue,
+        offlineRevenue: r.offline.reduce((s: number, v: { revenue: number }) => s + v.revenue, 0),
       }))
       // 차트 X축: 오름차순 (과거 → 최신)
       .sort((a, b) =>

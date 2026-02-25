@@ -47,17 +47,21 @@ async function main() {
 
     const { year, month } = report.period;
 
+    // offline이 배열이면 flatMap, 단일 객체면 직접 참조 (마이그레이션 전 호환)
+    const offlineArr = Array.isArray(report.offline) ? report.offline : [report.offline];
+    const allOfflineProducts = offlineArr.flatMap((v) => v.products);
+
     const overallRanking = calcOverallRanking(
       report.naver.products,
       report.coupang.products,
-      report.offline.products,
+      allOfflineProducts,
       mapping,
       5
     );
     const productMatrix = calcProductMatrix(
       report.naver.products,
       report.coupang.products,
-      report.offline.products,
+      allOfflineProducts,
       mapping
     );
 

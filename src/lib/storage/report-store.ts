@@ -21,6 +21,15 @@ import { loadProductMapping } from "@/lib/storage/mapping-store";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
 
+// 파일별 쓰기 잠금 — 동시 PATCH 요청으로 인한 JSON 손상 방지
+const writeLocks = new Map<string, Promise<void>>();
+function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = writeLocks.get(key) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  writeLocks.set(key, next.then(() => {}, () => {}));
+  return next;
+}
+
 function pad(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -37,7 +46,20 @@ async function ensureDataDir(): Promise<void> {
 export async function saveReport(report: MonthlyReport): Promise<void> {
   await ensureDataDir();
   const filePath = getReportPath(report.period.year, report.period.month);
-  await fs.writeFile(filePath, JSON.stringify(report, null, 2), "utf-8");
+  await withLock(filePath, () =>
+    fs.writeFile(filePath, JSON.stringify(report, null, 2), "utf-8")
+  );
+}
+
+/** 기존 레포트 마이그레이션: offline 단일 객체 → 배열 변환 */
+function migrateReport(raw: Record<string, unknown>): MonthlyReport {
+  // offline이 배열이 아닌 경우 (구버전) → 배열로 래핑
+  if (raw.offline && !Array.isArray(raw.offline)) {
+    const single = raw.offline as Record<string, unknown>;
+    if (!single.venueId) single.venueId = "gosan";
+    raw.offline = [single];
+  }
+  return raw as unknown as MonthlyReport;
 }
 
 /** 레포트 로드. 없으면 null 반환 */
@@ -48,7 +70,7 @@ export async function loadReport(
   const filePath = getReportPath(year, month);
   try {
     const raw = await fs.readFile(filePath, "utf-8");
-    return JSON.parse(raw) as MonthlyReport;
+    return migrateReport(JSON.parse(raw));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
@@ -75,6 +97,9 @@ export async function updateReport(
     naver?: DeepPartial<NaverData>;
     coupang?: DeepPartial<CoupangData>;
     offline?: DeepPartial<OfflineData>;
+    offlineVenueId?: string;
+    addOfflineVenue?: { id: string; name: string };
+    removeOfflineVenueId?: string;
     sponsorship?: DeepPartial<SponsorshipData>;
     insights?: MonthlyReport["insights"];
   }
@@ -100,31 +125,68 @@ export async function updateReport(
       ? { ...coupangMerged, ...calcQuantitySummary(coupangMerged.products) }
       : coupangMerged;
 
-  const offlineMerged = updates.offline
-    ? deepMerge(existing.offline, updates.offline)
-    : existing.offline;
+  // ─── 오프라인 다중 입점처 처리 ────────────────────────────────────────
+  let offlineVenues: OfflineData[] = [...existing.offline];
 
-  // offline.products가 교체됐으면 수량 합계 + 입점 수수료 자동 계산
-  // 입점 수수료율은 환경변수로 관리 (수기로 직접 수정 가능)
-  const offlineCommissionPerItem = parseInt(
-    process.env.OFFLINE_COMMISSION_PER_ITEM ?? "0"
-  );
-  // offline.products가 교체됐으면 수량 합계 + 입점 수수료 자동 재계산
-  // 입점 수수료율은 환경변수로 관리 (수기로 직접 수정 가능)
-  const offline: OfflineData = (() => {
-    if (updates.offline?.products === undefined) return offlineMerged;
-    const qtySummary = calcQuantitySummary(offlineMerged.products);
-    return {
-      ...offlineMerged,
-      ...qtySummary,
-      fees: {
-        ...offlineMerged.fees,
-        commissionFee: qtySummary.totalQuantity * offlineCommissionPerItem,
-      },
-    };
-  })();
+  // 입점처 추가 (빈 데이터)
+  if (updates.addOfflineVenue) {
+    const { id, name } = updates.addOfflineVenue;
+    if (!offlineVenues.some((v) => v.venueId === id)) {
+      offlineVenues.push({
+        venueId: id,
+        venueName: name,
+        revenue: 0,
+        totalQuantity: 0,
+        handmadeQuantity: 0,
+        otherQuantity: 0,
+        fees: { commissionFee: 0, logisticsFee: 0, adFee: 0, settlementAmount: 0 },
+        profit: { profit: 0, materialCost: 0, netProfit: 0 },
+        products: [],
+      });
+    }
+  }
 
-  // 플랫폼 데이터가 변경되면 이익·요약·랭킹 재계산
+  // 입점처 비활성화 (배열에서 제거)
+  if (updates.removeOfflineVenueId) {
+    offlineVenues = offlineVenues.filter(
+      (v) => v.venueId !== updates.removeOfflineVenueId
+    );
+  }
+
+  // 특정 입점처 데이터 수정
+  if (updates.offline && updates.offlineVenueId) {
+    const offlineCommissionPerItem = parseInt(
+      process.env.OFFLINE_COMMISSION_PER_ITEM ?? "0"
+    );
+
+    offlineVenues = offlineVenues.map((venue) => {
+      if (venue.venueId !== updates.offlineVenueId) return venue;
+
+      const merged = deepMerge(venue, updates.offline!);
+
+      // products가 교체됐으면 수량 합계 + 입점 수수료 자동 재계산
+      if (updates.offline!.products !== undefined) {
+        const qtySummary = calcQuantitySummary(merged.products);
+        return {
+          ...merged,
+          ...qtySummary,
+          fees: {
+            ...merged.fees,
+            commissionFee: qtySummary.totalQuantity * offlineCommissionPerItem,
+          },
+        };
+      }
+      return merged;
+    });
+  }
+
+  // 각 입점처별 이익 재계산
+  const offlineWithProfit: OfflineData[] = offlineVenues.map((v) => ({
+    ...v,
+    profit: calcOfflineProfit(v.revenue, v.fees),
+  }));
+
+  // 플랫폼 데이터 이익 재계산
   const naverWithProfit: NaverData = {
     ...naver,
     profit: calcOnlineProfit(naver.revenue, naver.fees),
@@ -132,10 +194,6 @@ export async function updateReport(
   const coupangWithProfit: CoupangData = {
     ...coupang,
     profit: calcOnlineProfit(coupang.revenue, coupang.fees),
-  };
-  const offlineWithProfit: OfflineData = {
-    ...offline,
-    profit: calcOfflineProfit(offline.revenue, offline.fees),
   };
 
   // 협찬 데이터 병합
@@ -158,6 +216,9 @@ export async function updateReport(
 
   const mapping = await loadProductMapping();
 
+  // 모든 오프라인 입점처 products 합산
+  const allOfflineProducts = offlineWithProfit.flatMap((v) => v.products);
+
   const summary = calcOverallSummary(
     naverWithProfit,
     coupangWithProfit,
@@ -166,18 +227,18 @@ export async function updateReport(
   );
   const naverRanking = calcPlatformRanking(naverWithProfit.products, 3, mapping);
   const coupangRanking = calcPlatformRanking(coupangWithProfit.products, 3, mapping);
-  const offlineRanking = calcPlatformRanking(offlineWithProfit.products, 3, mapping);
+  const offlineRanking = calcPlatformRanking(allOfflineProducts, 3, mapping);
   const overallRanking = calcOverallRanking(
     naverWithProfit.products,
     coupangWithProfit.products,
-    offlineWithProfit.products,
+    allOfflineProducts,
     mapping,
     5
   );
   const sponsorExcludedRanking = calcSponsorExcludedRanking(
     naverWithProfit.products,
     coupangWithProfit.products,
-    offlineWithProfit.products,
+    allOfflineProducts,
     sponsorship.items,
     mapping,
     5
@@ -185,7 +246,7 @@ export async function updateReport(
   const productMatrix = calcProductMatrix(
     naverWithProfit.products,
     coupangWithProfit.products,
-    offlineWithProfit.products,
+    allOfflineProducts,
     mapping
   );
 

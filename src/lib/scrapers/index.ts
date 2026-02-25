@@ -208,16 +208,19 @@ export async function collectMonthlyData(
   ]);
 
   const offlineFees: PlatformFees = EMPTY_FEES;
-  const offline: OfflineData = {
-    venueName: "고산의낮",
-    revenue: 0,
-    totalQuantity: 0,
-    handmadeQuantity: 0,
-    otherQuantity: 0,
-    fees: offlineFees,
-    profit: calcOfflineProfit(0, offlineFees),
-    products: [],
-  };
+  const offline: OfflineData[] = [
+    {
+      venueId: "gosan",
+      venueName: "고산의낮",
+      revenue: 0,
+      totalQuantity: 0,
+      handmadeQuantity: 0,
+      otherQuantity: 0,
+      fees: offlineFees,
+      profit: calcOfflineProfit(0, offlineFees),
+      products: [],
+    },
+  ];
 
   // 새 상품이 있으면 매핑 파일에 자동 추가
   const addedCount = await syncNewProductsToMapping(
@@ -243,21 +246,22 @@ export async function collectMonthlyData(
     handmadeQuantity: 0,
   };
 
+  const allOfflineProducts = offline.flatMap((v) => v.products);
   const summary = calcOverallSummary(naverData, coupangData, offline, 0);
   const naverRanking = calcPlatformRanking(naverData.products, 3, mapping);
   const coupangRanking = calcPlatformRanking(coupangData.products, 3, mapping);
-  const offlineRanking = calcPlatformRanking(offline.products, 3, mapping);
+  const offlineRanking = calcPlatformRanking(allOfflineProducts, 3, mapping);
   const overallRanking = calcOverallRanking(
     naverData.products,
     coupangData.products,
-    offline.products,
+    allOfflineProducts,
     mapping,
     5
   );
   const sponsorExcludedRanking = calcSponsorExcludedRanking(
     naverData.products,
     coupangData.products,
-    offline.products,
+    allOfflineProducts,
     [],
     mapping,
     5
@@ -265,7 +269,7 @@ export async function collectMonthlyData(
   const productMatrix = calcProductMatrix(
     naverData.products,
     coupangData.products,
-    offline.products,
+    allOfflineProducts,
     mapping
   );
 

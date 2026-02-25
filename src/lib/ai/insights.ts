@@ -35,12 +35,12 @@ ${period.year}년 ${period.month}월 (${report.dataRange.start} ~ ${report.dataR
 - 광고비: ${formatKRW(coupang.fees.adFee)}
 - 이익: ${formatKRW(coupang.profit.profit)} / 순이익: ${formatKRW(coupang.profit.netProfit)}
 
-### 오프라인 (${offline.venueName})
-- 매출: ${formatKRW(offline.revenue)}
-- 수수료: ${formatKRW(offline.fees.commissionFee)}
-- 물류비: ${formatKRW(offline.fees.logisticsFee)}
-- 광고비: ${formatKRW(offline.fees.adFee)}
-- 이익: ${formatKRW(offline.profit.profit)} / 순이익: ${formatKRW(offline.profit.netProfit)}
+${offline.map((v) => `### 오프라인 (${v.venueName})
+- 매출: ${formatKRW(v.revenue)}
+- 수수료: ${formatKRW(v.fees.commissionFee)}
+- 물류비: ${formatKRW(v.fees.logisticsFee)}
+- 광고비: ${formatKRW(v.fees.adFee)}
+- 이익: ${formatKRW(v.profit.profit)} / 순이익: ${formatKRW(v.profit.netProfit)}`).join("\n\n")}
 
 ## 전체 요약
 - 총 매출: ${formatKRW(summary.totalRevenue)}

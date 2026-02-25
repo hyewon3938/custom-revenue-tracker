@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     //    - sponsorship: 협찬 마케팅 데이터 (수기 입력)
     const existing = await loadReport(year, month);
     if (existing) {
-      reportData.offline = existing.offline;
+      reportData.offline = existing.offline; // 배열 보존
       reportData.naver.fees.adFee = existing.naver.fees.adFee;
       reportData.sponsorship = existing.sponsorship ?? {
         items: [],
@@ -58,18 +58,20 @@ export async function POST(request: NextRequest) {
       };
 
       // 보존된 데이터로 파생 필드 재계산
-      // (collectMonthlyData는 offline=빈값·adFee=0·sponsorship=빈값 기준으로 계산했으므로)
       reportData.naver.profit = calcOnlineProfit(
         reportData.naver.revenue,
         reportData.naver.fees
       );
-      reportData.offline.profit = calcOfflineProfit(
-        reportData.offline.revenue,
-        reportData.offline.fees
-      );
+      // 각 입점처별 이익 재계산
+      reportData.offline = reportData.offline.map((v) => ({
+        ...v,
+        profit: calcOfflineProfit(v.revenue, v.fees),
+      }));
 
       const mapping = await loadProductMapping();
       const marketingCost = reportData.sponsorship.marketingCost;
+      const allOfflineProducts = reportData.offline.flatMap((v) => v.products);
+
       reportData.summary = calcOverallSummary(
         reportData.naver,
         reportData.coupang,
@@ -77,21 +79,21 @@ export async function POST(request: NextRequest) {
         marketingCost
       );
       reportData.offlineRanking = calcPlatformRanking(
-        reportData.offline.products,
+        allOfflineProducts,
         3,
         mapping
       );
       reportData.overallRanking = calcOverallRanking(
         reportData.naver.products,
         reportData.coupang.products,
-        reportData.offline.products,
+        allOfflineProducts,
         mapping,
         5
       );
       reportData.sponsorExcludedRanking = calcSponsorExcludedRanking(
         reportData.naver.products,
         reportData.coupang.products,
-        reportData.offline.products,
+        allOfflineProducts,
         reportData.sponsorship.items,
         mapping,
         5
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
       reportData.productMatrix = calcProductMatrix(
         reportData.naver.products,
         reportData.coupang.products,
-        reportData.offline.products,
+        allOfflineProducts,
         mapping
       );
     }
