@@ -21,9 +21,9 @@ export function InputRow({
   return (
     <div
       className="flex items-center justify-between gap-3 px-2 py-1.5 -mx-2 rounded-lg transition-colors"
-      style={{ backgroundColor: focused ? "#eff6ff" : undefined }}
+      style={{ backgroundColor: focused ? "var(--brand-50)" : undefined }}
       onMouseEnter={(e) => {
-        if (!focused) e.currentTarget.style.backgroundColor = "#f8fafc";
+        if (!focused) e.currentTarget.style.backgroundColor = "var(--warm-100)";
       }}
       onMouseLeave={(e) => {
         if (!focused) e.currentTarget.style.backgroundColor = "";
@@ -31,7 +31,7 @@ export function InputRow({
     >
       <span
         className="text-xs truncate flex-1 transition-colors"
-        style={{ color: focused ? "#2563eb" : "#4b5563" }}
+        style={{ color: focused ? "var(--brand-500)" : "#4b5563" }}
         title={label}
       >
         {label}
@@ -47,7 +47,7 @@ export function InputRow({
           onBlur(Math.max(0, Number(e.target.value)));
         }}
         className="w-16 shrink-0 text-right text-xs border rounded px-2 py-1 focus:outline-none transition-colors"
-        style={{ borderColor: focused ? "#60a5fa" : "#e5e7eb" }}
+        style={{ borderColor: focused ? "var(--brand-400)" : "var(--warm-200)" }}
       />
     </div>
   );
@@ -118,14 +118,14 @@ export default function ProductQtyEditor({
   const summaryItems = showSummaryList ? savedItems.filter((i) => i.quantity > 0) : [];
 
   return (
-    <div className="mt-3 pt-3 border-t border-gray-100">
+    <div className="mt-3 pt-3 border-t border-warm-100">
       {sorted.length > 0 ? (
         <button
           onClick={() => setOpen((v) => !v)}
           className="flex items-center justify-between w-full text-left mb-1.5"
         >
           <span className="text-xs text-gray-400">
-            {label} <span className="text-blue-400">(수기)</span>
+            {label} <span className="text-brand-400">(수기)</span>
           </span>
           <svg
             className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${

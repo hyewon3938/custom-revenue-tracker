@@ -21,10 +21,10 @@ export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
       <h3 className="text-lg font-semibold text-gray-800 mb-3">
         상품 × 플랫폼 매트릭스
       </h3>
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-warm-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
+            <tr className="bg-warm-100 border-b border-warm-200">
               <th className="text-left px-4 py-3 font-medium text-gray-500">
                 상품명
               </th>
@@ -53,12 +53,12 @@ export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
               return (
                 <tr
                   key={row.productName}
-                  className={`border-b border-gray-50 last:border-0 ${idx % 2 === 1 ? "bg-gray-50/40" : "bg-white"}`}
+                  className={`border-b border-warm-100 last:border-0 ${idx % 2 === 1 ? "bg-warm-100/40" : "bg-white"}`}
                 >
                   <td className="px-4 py-2.5">
                     <span className="text-gray-800">{row.productName}</span>
                     {row.category === "handmade" && (
-                      <span className="ml-2 text-xs text-blue-400">끈갈피</span>
+                      <span className="ml-2 text-xs text-brand-400">끈갈피</span>
                     )}
                   </td>
                   <td className="text-right px-4 py-2.5 text-gray-600">

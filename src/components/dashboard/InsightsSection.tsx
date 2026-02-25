@@ -18,13 +18,13 @@ const TYPE_CONFIG: Record<
     label: "주의",
   },
   neutral: {
-    card: "bg-gray-50 border-gray-200",
-    badge: "bg-gray-100 text-gray-600",
+    card: "bg-warm-100 border-warm-200",
+    badge: "bg-warm-200 text-warm-700",
     label: "관찰",
   },
   action: {
-    card: "bg-blue-50 border-blue-200",
-    badge: "bg-blue-100 text-blue-700",
+    card: "bg-brand-50 border-brand-200",
+    badge: "bg-brand-100 text-brand-700",
     label: "액션",
   },
 };
@@ -53,14 +53,14 @@ export default function InsightsSection({ insights, onRegenerate }: Props) {
         <button
           onClick={handleRegenerate}
           disabled={regenerating}
-          className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors"
+          className="text-sm text-brand-500 hover:text-brand-700 disabled:opacity-40 transition-colors"
         >
           {regenerating ? "생성 중..." : "재생성"}
         </button>
       </div>
 
       {insights.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 py-12 text-center text-sm text-gray-400">
+        <div className="bg-white rounded-xl border border-warm-200 py-12 text-center text-sm text-gray-400">
           인사이트가 없습니다.
         </div>
       ) : (

@@ -21,8 +21,8 @@ export default function HeaderNav() {
             href={href}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               isActive
-                ? "bg-blue-50 text-blue-700"
-                : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"
+                ? "bg-brand-50 text-brand-600"
+                : "text-gray-500 hover:text-gray-900 hover:bg-warm-100"
             }`}
           >
             {label}

@@ -18,9 +18,9 @@ function EditRow({
   onSave: (v: number) => Promise<void>;
 }) {
   return (
-    <div className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
+    <div className="flex justify-between items-center py-1.5 border-b border-warm-100 last:border-0">
       <span className="text-sm text-gray-500">
-        {label} <span className="text-xs text-blue-400">(수기)</span>
+        {label} <span className="text-xs text-brand-400">(수기)</span>
       </span>
       <EditableField value={value} onSave={onSave} />
     </div>
@@ -53,10 +53,10 @@ export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }
   return (
     <section>
       <h3 className="text-lg font-semibold text-gray-800 mb-3">협찬 마케팅</h3>
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-warm-200 p-5">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-gray-900">협찬 현황</h4>
-          <span className="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">
+          <span className="text-xs font-bold bg-warm-200 text-warm-700 px-2 py-0.5 rounded-full">
             협찬
           </span>
         </div>

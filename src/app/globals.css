@@ -2,16 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════
+   디자인 시스템 — 색상 토큰
+   컬러를 바꾸려면 이 파일의 CSS 변수만 수정하면 됩니다.
+   Tailwind 클래스 (brand-500, warm-200 등)는 tailwind.config.ts
+   에서 이 변수들을 참조하므로 여기서만 수정하면 전체 반영됩니다.
+═══════════════════════════════════════════════════════ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* ── 브랜드 블루 팔레트 ───────────────────────────── */
+  --brand-50:  #EFF6FF;  /* blue-50  */
+  --brand-100: #DBEAFE;  /* blue-100 */
+  --brand-200: #BFDBFE;  /* blue-200 */
+  --brand-300: #93C5FD;  /* blue-300 */
+  --brand-400: #60A5FA;  /* blue-400 */
+  --brand-500: #2563EB;  /* blue-600 — primary CTA */
+  --brand-600: #1D4ED8;  /* blue-700 — primary dark / hover */
+  --brand-700: #1E40AF;  /* blue-800 */
+  --brand-800: #1E3A8A;  /* blue-900 */
+  --brand-900: #172554;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* ── 뉴트럴 팔레트 ───────────────────────────────── */
+  --warm-50:  #F9FAFB;  /* gray-50  — 페이지 배경 */
+  --warm-100: #F3F4F6;  /* gray-100 — 카드 내 교번 행 */
+  --warm-200: #E5E7EB;  /* gray-200 — 테두리 / 구분선 */
+  --warm-300: #D1D5DB;  /* gray-300 */
+  --warm-400: #9CA3AF;  /* gray-400 */
+  --warm-500: #6B7280;  /* gray-500 */
+  --warm-600: #4B5563;  /* gray-600 */
+  --warm-700: #374151;  /* gray-700 */
+  --warm-800: #1F2937;  /* gray-800 */
+  --warm-900: #111827;  /* gray-900 */
+
+  /* ── 시맨틱 토큰 (색상 역할 정의) ───────────────── */
+  --color-bg:             var(--warm-50);    /* 페이지 배경 */
+  --color-surface:        #FFFFFF;           /* 카드 표면 */
+  --color-border:         var(--warm-200);   /* 기본 테두리 */
+  --color-border-light:   var(--warm-100);   /* 카드 내 연한 구분선 */
+  --color-primary:        var(--brand-500);  /* 버튼 / CTA */
+  --color-primary-hover:  var(--brand-600);  /* 버튼 hover */
+  --color-primary-light:  var(--brand-50);   /* 선택 / hover 배경 */
+  --color-accent:         var(--brand-500);  /* 강조 텍스트 / 링크 */
+
+  /* Next.js 전역 변수 */
+  --background: var(--color-bg);
+  --foreground: #111827;
 }
 
 body {

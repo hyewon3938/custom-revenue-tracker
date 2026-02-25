@@ -14,16 +14,20 @@ function StatCard({
 }) {
   return (
     <div
-      className={`rounded-xl border p-5 ${highlight ? "bg-blue-600 border-blue-500 text-white" : "bg-white border-gray-200"}`}
+      className={`rounded-xl border p-5 ${
+        highlight
+          ? "bg-brand-500 border-brand-600 text-white"
+          : "bg-white border-warm-200"
+      }`}
     >
-      <p className={`text-sm ${highlight ? "text-blue-100" : "text-gray-500"}`}>
+      <p className={`text-sm ${highlight ? "text-brand-100" : "text-gray-500"}`}>
         {label}
       </p>
       <p className={`text-2xl font-bold mt-1 ${highlight ? "text-white" : "text-gray-900"}`}>
         {value}
       </p>
       {sub && (
-        <p className={`text-xs mt-1 ${highlight ? "text-blue-200" : "text-gray-400"}`}>
+        <p className={`text-xs mt-1 ${highlight ? "text-brand-200" : "text-gray-400"}`}>
           {sub}
         </p>
       )}
@@ -33,7 +37,7 @@ function StatCard({
 
 function CostRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
+    <div className="flex justify-between items-center py-1.5 border-b border-warm-100 last:border-0">
       <span className="text-sm text-gray-500">{label}</span>
       <span className="text-sm font-semibold text-gray-700">{krw(value)}</span>
     </div>
@@ -69,7 +73,7 @@ export default function OverallSummarySection({
 
       {/* 비용 내역 + 판매량 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-warm-200 p-5">
           <p className="text-sm font-medium text-gray-700 mb-3">비용 내역</p>
           <CostRow label="플랫폼 수수료" value={summary.totalCommissionFee} />
           <CostRow label="물류비" value={summary.totalLogisticsFee} />
@@ -90,7 +94,7 @@ export default function OverallSummarySection({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-warm-200 p-5">
           <p className="text-sm font-medium text-gray-700 mb-3">판매량</p>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
