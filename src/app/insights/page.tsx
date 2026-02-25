@@ -71,7 +71,7 @@ export default async function InsightsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-bold text-gray-900">전체 인사이트</h2>
+        <h2 className="text-xl font-bold text-gray-900">인사이트</h2>
         <p className="text-sm text-gray-400 mt-1">
           {months[0].label} ~ {months[months.length - 1].label} ·{" "}
           {months.length}개월

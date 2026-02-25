@@ -34,14 +34,14 @@ export default function QuantityChart({ data }: Props) {
           dataKey="handmadeQuantity"
           name="끈갈피"
           stackId="qty"
-          fill="#0046FF"
+          fill="#60B5FF"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="otherQuantity"
           name="기타"
           stackId="qty"
-          fill="#73C8D2"
+          fill="#AFDDFF"
           radius={[4, 4, 0, 0]}
         >
           {/* 스택 합계(총 판매량)를 막대 위에 표시 */}

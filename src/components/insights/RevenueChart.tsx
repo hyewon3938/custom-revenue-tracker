@@ -14,7 +14,7 @@ import {
 import { MonthlyOverview } from "@/lib/types";
 
 const formatKRW = (v: number) =>
-  v.toLocaleString("ko-KR", { style: "currency", currency: "KRW" });
+  v.toLocaleString("ko-KR") + " 원";
 
 interface Props {
   data: MonthlyOverview[];
@@ -39,21 +39,21 @@ export default function RevenueChart({ data }: Props) {
           dataKey="naverRevenue"
           name="네이버"
           stackId="revenue"
-          fill="#BF124D"
+          fill="#A3D78A"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="coupangRevenue"
           name="쿠팡"
           stackId="revenue"
-          fill="#67B2D8"
+          fill="#FF937E"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="offlineRevenue"
           name="오프라인"
           stackId="revenue"
-          fill="#76153C"
+          fill="#FF5555"
           radius={[4, 4, 0, 0]}
         >
           {/* 스택 합계(총 매출)를 막대 위에 표시 */}

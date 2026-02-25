@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/insights", label: "전체 인사이트" },
+  { href: "/insights", label: "인사이트" },
   { href: "/monthly",  label: "월별 대시보드" },
 ] as const;
 

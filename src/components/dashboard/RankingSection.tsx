@@ -1,11 +1,11 @@
 import { ProductRankEntry } from "@/lib/types";
 
 function RankBadge({ rank }: { rank: number }) {
-  // 1위: brand blue, 2위: warm beige, 3위: warm mid, 그 외: 연회색
+  // 1위: 금메달, 2위: 은메달, 3위: 동메달(연한), 그 외: 연회색
   const colors = [
-    "bg-brand-500 text-white",
-    "bg-warm-300 text-warm-800",
-    "bg-warm-200 text-warm-700",
+    "bg-yellow-400 text-yellow-900",
+    "bg-gray-300 text-gray-600",
+    "bg-amber-200 text-amber-800",
   ];
   return (
     <span

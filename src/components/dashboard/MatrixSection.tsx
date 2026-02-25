@@ -38,7 +38,7 @@ export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
                 오프라인
               </th>
               {hasSponsorship && (
-                <th className="text-right px-4 py-3 font-medium text-pink-400">
+                <th className="text-right px-4 py-3 font-medium" style={{ color: "#2663EB" }}>
                   협찬
                 </th>
               )}
@@ -71,7 +71,7 @@ export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
                     {row.offline > 0 ? row.offline : <span className="text-gray-200">—</span>}
                   </td>
                   {hasSponsorship && (
-                    <td className="text-right px-4 py-2.5 text-pink-500">
+                    <td className="text-right px-4 py-2.5" style={{ color: "#2663EB" }}>
                       {sponsored > 0 ? sponsored : <span className="text-gray-200">—</span>}
                     </td>
                   )}
