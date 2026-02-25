@@ -226,8 +226,7 @@ export async function updateReport(
     naverWithProfit,
     coupangWithProfit,
     offlineWithProfit,
-    sponsorship.marketingCost,
-    sponsorship.items
+    sponsorship.marketingCost
   );
   const naverRanking = calcPlatformRanking(naverWithProfit.products, 3, mapping);
   const coupangRanking = calcPlatformRanking(coupangWithProfit.products, 3, mapping);
@@ -251,8 +250,7 @@ export async function updateReport(
     naverWithProfit.products,
     coupangWithProfit.products,
     allOfflineProducts,
-    mapping,
-    sponsorship.items
+    mapping
   );
 
   const updated: MonthlyReport = {

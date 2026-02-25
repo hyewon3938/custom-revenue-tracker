@@ -75,8 +75,7 @@ export async function POST(request: NextRequest) {
         reportData.naver,
         reportData.coupang,
         reportData.offline,
-        marketingCost,
-        reportData.sponsorship.items
+        marketingCost
       );
       reportData.offlineRanking = calcPlatformRanking(
         allOfflineProducts,
@@ -102,8 +101,7 @@ export async function POST(request: NextRequest) {
         reportData.naver.products,
         reportData.coupang.products,
         allOfflineProducts,
-        mapping,
-        reportData.sponsorship.items
+        mapping
       );
     }
 

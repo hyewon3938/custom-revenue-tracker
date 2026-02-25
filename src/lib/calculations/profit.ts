@@ -68,8 +68,7 @@ export function calcOverallSummary(
   naver: NaverData,
   coupang: CoupangData,
   offlineVenues: OfflineData[],
-  marketingCost: number = 0,
-  sponsoredItems: SponsoredItem[] = []
+  marketingCost: number = 0
 ): OverallSummary {
   const offRevenue = offlineVenues.reduce((s, v) => s + v.revenue, 0);
   const offCommission = offlineVenues.reduce((s, v) => s + v.fees.commissionFee, 0);
@@ -82,17 +81,6 @@ export function calcOverallSummary(
   const offHandmade = offlineVenues.reduce((s, v) => s + v.handmadeQuantity, 0);
   const offOther = offlineVenues.reduce((s, v) => s + v.otherQuantity, 0);
 
-  // 협찬 수량 차감 — 협찬 끈갈피는 네이버 구매로 잡히지만 실고객 판매가 아님
-  const sponsoredTotal = sponsoredItems.reduce((s, i) => s + i.quantity, 0);
-  const sponsoredHandmade = sponsoredItems
-    .filter((i) => i.category === "handmade")
-    .reduce((s, i) => s + i.quantity, 0);
-  const sponsoredOther = sponsoredTotal - sponsoredHandmade;
-
-  const rawTotal = naver.totalQuantity + coupang.totalQuantity + offTotal;
-  const rawHandmade = naver.handmadeQuantity + coupang.handmadeQuantity + offHandmade;
-  const rawOther = naver.otherQuantity + coupang.otherQuantity + offOther;
-
   return {
     totalRevenue: naver.revenue + coupang.revenue + offRevenue,
     totalCommissionFee: naver.fees.commissionFee + coupang.fees.commissionFee + offCommission,
@@ -102,9 +90,9 @@ export function calcOverallSummary(
     totalMaterialCost: naver.profit.materialCost + coupang.profit.materialCost + offMaterial,
     marketingCost,
     totalNetProfit: naver.profit.netProfit + coupang.profit.netProfit + offNetProfit - marketingCost,
-    totalQuantity: Math.max(0, rawTotal - sponsoredTotal),
-    handmadeQuantity: Math.max(0, rawHandmade - sponsoredHandmade),
-    otherQuantity: Math.max(0, rawOther - sponsoredOther),
+    totalQuantity: naver.totalQuantity + coupang.totalQuantity + offTotal,
+    handmadeQuantity: naver.handmadeQuantity + coupang.handmadeQuantity + offHandmade,
+    otherQuantity: naver.otherQuantity + coupang.otherQuantity + offOther,
   };
 }
 
@@ -331,8 +319,7 @@ export function calcProductMatrix(
   naver: ProductSales[],
   coupang: ProductSales[],
   offline: ProductSales[],
-  mapping: ProductMappingConfig | null,
-  sponsoredItems: SponsoredItem[] = []
+  mapping: ProductMappingConfig | null
 ): ProductMatrixRow[] {
   const map = new Map<
     string,
@@ -366,22 +353,15 @@ export function calcProductMatrix(
   add(coupang, "coupang");
   add(offline, "offline");
 
-  // 협찬 수량 차감 — 협찬 끈갈피는 네이버 판매로 잡히지만 실고객 판매가 아님
-  const sponsoredMap = new Map(sponsoredItems.map((i) => [i.productName, i.quantity]));
-
   return Array.from(map.entries())
-    .map(([name, v]) => {
-      const sponsored = sponsoredMap.get(name) ?? 0;
-      const adjustedNaver = Math.max(0, v.naver - sponsored);
-      return {
-        productName: name,
-        category: v.category,
-        naver: adjustedNaver,
-        coupang: v.coupang,
-        offline: v.offline,
-        total: adjustedNaver + v.coupang + v.offline,
-      };
-    })
+    .map(([name, v]) => ({
+      productName: name,
+      category: v.category,
+      naver: v.naver,
+      coupang: v.coupang,
+      offline: v.offline,
+      total: v.naver + v.coupang + v.offline,
+    }))
     .sort((a, b) => b.total - a.total);
 }
 
