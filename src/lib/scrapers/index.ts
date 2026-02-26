@@ -1,11 +1,5 @@
 import { chromium, Browser, BrowserContext, Page } from "playwright";
-import {
-  MonthlyReport,
-  NaverData,
-  CoupangData,
-  OfflineData,
-  PlatformFees,
-} from "@/lib/types";
+import { NaverData, CoupangData, PlatformFees } from "@/lib/types";
 import { pad } from "@/lib/utils/format";
 import { loginNaver } from "./naver-auth";
 import { loginCoupang } from "./coupang-auth";
@@ -20,22 +14,7 @@ import {
   calcNaverShippingStats,
   naverMaterialBase,
   coupangMaterialBase,
-  calcOverallSummary,
 } from "@/lib/calculations/profit";
-import {
-  calcPlatformRanking,
-  calcOverallRanking,
-  calcProductMatrix,
-  calcSponsorExcludedRanking,
-} from "@/lib/calculations/ranking";
-import { loadProductMapping, syncNewProductsToMapping } from "@/lib/storage/mapping-store";
-
-const EMPTY_FEES: PlatformFees = {
-  settlementAmount: 0,
-  logisticsFee: 0,
-  commissionFee: 0,
-  adFee: 0,
-};
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -198,102 +177,24 @@ async function collectCoupangData(
 }
 
 /**
- * 네이버·쿠팡 데이터를 수집하고 MonthlyReport(insights 제외)를 반환.
- * 오프라인(고산의낮) 데이터는 0으로 초기화 — 이후 /api/report PATCH로 수기 입력.
+ * 네이버·쿠팡 데이터를 수집해 원시 결과만 반환.
+ * 오프라인/협찬/매핑 동기화/파생 필드 계산은 호출자(scrape/route.ts)가 담당.
  */
 export async function collectMonthlyData(
   year: number,
   month: number
-): Promise<Omit<MonthlyReport, "insights">> {
-  const dateRange = getDateRange(year, month);
+): Promise<{
+  naver: NaverData;
+  coupang: CoupangData;
+  period: { year: number; month: number };
+  dataRange: { start: string; end: string };
+}> {
+  const dataRange = getDateRange(year, month);
 
-  const [naverData, coupangData] = await Promise.all([
+  const [naver, coupang] = await Promise.all([
     collectNaverData(year, month),
     collectCoupangData(year, month),
   ]);
 
-  const offlineFees: PlatformFees = EMPTY_FEES;
-  const offline: OfflineData[] = [
-    {
-      venueId: "gosan",
-      venueName: "고산의낮",
-      revenue: 0,
-      totalQuantity: 0,
-      handmadeQuantity: 0,
-      otherQuantity: 0,
-      fees: offlineFees,
-      profit: calcPlatformProfit(0, offlineFees, 0, "OFFLINE_MATERIAL_RATE"),
-      products: [],
-    },
-  ];
-
-  // 새 상품이 있으면 매핑 파일에 자동 추가
-  const addedCount = await syncNewProductsToMapping(
-    naverData.products,
-    coupangData.products
-  );
-  if (addedCount > 0) {
-    console.log(
-      `[매핑] 신규 상품 ${addedCount}개를 product-mapping.json에 추가했습니다.`
-    );
-    console.log(
-      `  → data/product-mapping.json을 열어 canonical 이름을 확인해주세요.`
-    );
-  }
-
-  const mapping = await loadProductMapping();
-
-  // 협찬 초기값 (수기 입력이므로 빈 상태로 시작)
-  const sponsorship = {
-    items: [],
-    marketingCost: 0,
-    totalQuantity: 0,
-    handmadeQuantity: 0,
-  };
-
-  const allOfflineProducts = offline.flatMap((v) => v.products);
-  const summary = calcOverallSummary(naverData, coupangData, offline, 0);
-  const naverRanking = calcPlatformRanking(naverData.products, 3, mapping);
-  const coupangRanking = calcPlatformRanking(coupangData.products, 3, mapping);
-  const offlineRanking = calcPlatformRanking(allOfflineProducts, 3, mapping);
-  const overallRanking = calcOverallRanking(
-    naverData.products,
-    coupangData.products,
-    allOfflineProducts,
-    mapping,
-    5
-  );
-  const sponsorExcludedRanking = calcSponsorExcludedRanking(
-    naverData.products,
-    coupangData.products,
-    allOfflineProducts,
-    [],
-    mapping,
-    5
-  );
-  const productMatrix = calcProductMatrix(
-    naverData.products,
-    coupangData.products,
-    allOfflineProducts,
-    mapping
-  );
-
-  const now = new Date().toISOString();
-  return {
-    period: { year, month },
-    dataRange: dateRange,
-    naver: naverData,
-    coupang: coupangData,
-    offline,
-    sponsorship,
-    summary,
-    naverRanking,
-    coupangRanking,
-    offlineRanking,
-    overallRanking,
-    sponsorExcludedRanking,
-    productMatrix,
-    collectedAt: now,
-    lastModifiedAt: now,
-  };
+  return { naver, coupang, period: { year, month }, dataRange };
 }

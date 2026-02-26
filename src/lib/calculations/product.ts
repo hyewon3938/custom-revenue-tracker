@@ -4,6 +4,7 @@ import {
   ProductCategory,
   ProductMappingConfig,
 } from "@/lib/types";
+import { OFFLINE_SIMILARITY_THRESHOLD } from "@/lib/config";
 
 // ─── 상품 카테고리 판별 ─────────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ export function toCanonical(
         bestCanonical = m.canonical;
       }
     }
-    if (bestScore >= 0.5) return bestCanonical;
+    if (bestScore >= OFFLINE_SIMILARITY_THRESHOLD) return bestCanonical;
   }
 
   return name;

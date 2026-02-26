@@ -6,6 +6,7 @@ import {
   jaccardSimilarity,
   cleanProductName,
 } from "@/lib/calculations/product";
+import { MAPPING_SIMILARITY_THRESHOLD } from "@/lib/config";
 
 const MAPPING_PATH = path.join(process.cwd(), "data", "product-mapping.json");
 
@@ -30,7 +31,6 @@ export async function saveProductMapping(
 
 // ─── 신규 상품 자동 동기화 ─────────────────────────────────────────────────
 
-const SIMILARITY_THRESHOLD = 0.25;
 
 /**
  * 수집된 상품 목록을 보고 매핑 파일에 없는 신규 상품을 자동으로 추가.
@@ -82,7 +82,7 @@ export async function syncNewProductsToMapping(
       }
     }
 
-    if (bestCoupang && bestScore >= SIMILARITY_THRESHOLD) {
+    if (bestCoupang && bestScore >= MAPPING_SIMILARITY_THRESHOLD) {
       newMappings.push({
         canonical: cleanProductName(bestCoupang),
         naver: naverName,

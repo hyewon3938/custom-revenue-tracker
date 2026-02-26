@@ -11,7 +11,6 @@ import {
   SponsoredItem,
   SponsorshipData,
 } from "@/lib/types";
-import { loadProductMapping } from "@/lib/storage/mapping-store";
 import { toCanonical } from "./product";
 import { calcOverallSummary } from "./profit";
 
@@ -218,13 +217,13 @@ export function calcProductMatrix(
  * summary·ranking·matrix를 일괄 재계산.
  * updateReport()와 scrape/route.ts에서 공통 사용.
  */
-export async function rebuildDerivedFields(
+export function rebuildDerivedFields(
   naver: NaverData,
   coupang: CoupangData,
   offline: OfflineData[],
-  sponsorship: SponsorshipData
+  sponsorship: SponsorshipData,
+  mapping: ProductMappingConfig | null
 ) {
-  const mapping = await loadProductMapping();
   const allOfflineProducts = offline.flatMap((v) => v.products);
 
   const summary = calcOverallSummary(naver, coupang, offline, sponsorship.marketingCost);

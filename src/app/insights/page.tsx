@@ -1,57 +1,17 @@
 import { listReports, loadReport } from "@/lib/storage/report-store";
-import { MonthlyOverview, OverviewResponse } from "@/lib/types";
+import { buildOverviewData } from "@/lib/calculations/overview";
 import OverviewStatCards from "@/components/insights/OverviewStatCards";
 import ChartsSection from "@/components/insights/ChartsSection";
 
-async function getOverviewData(): Promise<OverviewResponse> {
+async function getOverviewData() {
   const list = await listReports();
-
   const results = await Promise.all(
     list.map(({ year, month }) => loadReport(year, month))
   );
-
-  const months: MonthlyOverview[] = results
-    .filter((r): r is NonNullable<typeof r> => r !== null)
-    .map((r) => ({
-      period: r.period,
-      label: `${r.period.year}.${String(r.period.month).padStart(2, "0")}`,
-      totalRevenue: r.summary.totalRevenue,
-      totalNetProfit: r.summary.totalNetProfit,
-      totalQuantity: r.summary.totalQuantity,
-      handmadeQuantity: r.summary.handmadeQuantity,
-      otherQuantity: r.summary.otherQuantity,
-      marginRate:
-        r.summary.totalRevenue > 0
-          ? Math.round(
-              (r.summary.totalNetProfit / r.summary.totalRevenue) * 1000
-            ) / 10
-          : 0,
-      naverRevenue: r.naver.revenue,
-      coupangRevenue: r.coupang.revenue,
-      offlineRevenue: r.offline.reduce((s: number, v: { revenue: number }) => s + v.revenue, 0),
-    }))
-    .sort((a, b) =>
-      a.period.year !== b.period.year
-        ? a.period.year - b.period.year
-        : a.period.month - b.period.month
-    );
-
-  const totals = months.reduce(
-    (acc, m) => ({
-      totalQuantity: acc.totalQuantity + m.totalQuantity,
-      handmadeQuantity: acc.handmadeQuantity + m.handmadeQuantity,
-      totalRevenue: acc.totalRevenue + m.totalRevenue,
-      totalNetProfit: acc.totalNetProfit + m.totalNetProfit,
-    }),
-    {
-      totalQuantity: 0,
-      handmadeQuantity: 0,
-      totalRevenue: 0,
-      totalNetProfit: 0,
-    }
+  const reports = results.filter(
+    (r): r is NonNullable<typeof r> => r !== null
   );
-
-  return { months, totals };
+  return buildOverviewData(reports);
 }
 
 export default async function InsightsPage() {

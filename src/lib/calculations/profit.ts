@@ -7,20 +7,13 @@ import {
   ShippingStats,
   OverallSummary,
 } from "@/lib/types";
-
-// ─── 환경변수 유틸 ──────────────────────────────────────────────────────────
-
-function getRate(key: string): number {
-  const val = process.env[key];
-  if (!val) throw new Error(`환경변수 ${key}가 설정되지 않았습니다.`);
-  const n = parseFloat(val);
-  if (isNaN(n)) throw new Error(`환경변수 ${key}는 숫자여야 합니다.`);
-  return n;
-}
-
-function getEnvInt(key: string, fallback: number): number {
-  return parseInt(process.env[key] ?? "") || fallback;
-}
+import {
+  ONLINE_MATERIAL_RATE,
+  OFFLINE_MATERIAL_RATE,
+  NAVER_SHIPPING_FEE,
+  NAVER_SHIPPING_COST,
+  COUPANG_SHIPPING_MARKUP,
+} from "@/lib/config";
 
 // ─── 플랫폼 공통 이익 계산 ──────────────────────────────────────────────────
 
@@ -31,17 +24,17 @@ function getEnvInt(key: string, fallback: number): number {
  * @param revenue      매출 (결제금액)
  * @param fees         플랫폼 비용 내역
  * @param materialBase 부자재비 계산 기준 금액 (플랫폼별 다름)
- * @param rateKey      부자재비 비율 환경변수 키 (기본: ONLINE_MATERIAL_RATE)
+ * @param materialRate 부자재비 비율 (기본: ONLINE_MATERIAL_RATE)
  */
 export function calcPlatformProfit(
   revenue: number,
   fees: PlatformFees,
   materialBase: number,
-  rateKey: string = "ONLINE_MATERIAL_RATE"
+  materialRate: number = ONLINE_MATERIAL_RATE
 ): PlatformProfit {
   const profit =
     revenue - fees.commissionFee - fees.logisticsFee - fees.adFee;
-  const materialCost = Math.round(materialBase * getRate(rateKey));
+  const materialCost = Math.round(materialBase * materialRate);
   const netProfit = profit - materialCost;
   return { profit, materialCost, netProfit };
 }
@@ -58,12 +51,12 @@ export function calcNaverShippingStats(
   shippingCollected: number,
   payerCount: number
 ): ShippingStats {
-  const fee = getEnvInt("NAVER_SHIPPING_FEE", 3000);
-  const cost = getEnvInt("NAVER_SHIPPING_COST", 3200);
-
-  const regularCount = fee > 0 ? Math.round(shippingCollected / fee) : 0;
+  const regularCount =
+    NAVER_SHIPPING_FEE > 0 ? Math.round(shippingCollected / NAVER_SHIPPING_FEE) : 0;
   const freeCount = Math.max(0, payerCount - regularCount);
-  const sellerCost = freeCount * cost + regularCount * (cost - fee);
+  const sellerCost =
+    freeCount * NAVER_SHIPPING_COST +
+    regularCount * (NAVER_SHIPPING_COST - NAVER_SHIPPING_FEE);
 
   return { regularCount, freeCount, sellerCost };
 }
@@ -83,8 +76,7 @@ export function coupangMaterialBase(
   revenue: number,
   totalQuantity: number
 ): number {
-  const markup = getEnvInt("COUPANG_SHIPPING_MARKUP", 2000);
-  return revenue - totalQuantity * markup;
+  return revenue - totalQuantity * COUPANG_SHIPPING_MARKUP;
 }
 
 /** 고산의낮: 매출(할인가) + 할인분(수수료) = 정가 기준 */
@@ -93,6 +85,18 @@ export function gosanMaterialBase(
   commissionFee: number
 ): number {
   return revenue + commissionFee;
+}
+
+/** 입점처별 materialBase 결정 + 이익 계산 (gosan 분기 로직을 한 곳에서 관리) */
+export function calcOfflineVenueProfit(venue: OfflineData): OfflineData {
+  const matBase =
+    venue.venueId === "gosan"
+      ? gosanMaterialBase(venue.revenue, venue.fees.commissionFee)
+      : venue.revenue;
+  return {
+    ...venue,
+    profit: calcPlatformProfit(venue.revenue, venue.fees, matBase, OFFLINE_MATERIAL_RATE),
+  };
 }
 
 // ─── 전체 요약 계산 ────────────────────────────────────────────────────────

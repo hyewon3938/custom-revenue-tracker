@@ -1,16 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MonthlyReport, SalesInsight } from "@/lib/types";
 import { formatKRW } from "@/lib/utils/format";
+import { ANTHROPIC_API_KEY, AI_MODEL } from "@/lib/config";
 
 // ─── Claude API 클라이언트 ──────────────────────────────────────────────
 
 function getClient(): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!ANTHROPIC_API_KEY) {
     throw new Error(
       "ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. .env.local에 추가하세요."
     );
   }
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 }
 
 // ─── 헬퍼 함수 ─────────────────────────────────────────────────────────
@@ -356,7 +357,7 @@ export async function generateSalesInsights(
   const prompt = buildPrompt(report, history);
 
   const message = await getClient().messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: AI_MODEL,
     max_tokens: 3000,
     system: SYSTEM_PROMPT,
     messages: [

@@ -13,12 +13,14 @@ import {
   calcNaverShippingStats,
   naverMaterialBase,
   coupangMaterialBase,
-  gosanMaterialBase,
+  calcOfflineVenueProfit,
 } from "@/lib/calculations/profit";
 import { reclassifyAndSummarize } from "@/lib/calculations/product";
 import { rebuildDerivedFields } from "@/lib/calculations/ranking";
+import { loadProductMapping } from "@/lib/storage/mapping-store";
 import { deepMerge } from "@/lib/utils/deep-merge";
 import { pad, getPrevMonth } from "@/lib/utils/format";
+import { REVIEW_MARKETING_COST_PER_HANDMADE } from "@/lib/config";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
 
@@ -148,13 +150,7 @@ function recalcPlatformProfits(
 
   const offlineWithProfit: OfflineData[] = offlineVenues.map((v) => {
     const { products, ...qtySummary } = reclassifyAndSummarize(v.products);
-    const matBase = v.venueId === "gosan"
-      ? gosanMaterialBase(v.revenue, v.fees.commissionFee)
-      : v.revenue;
-    return {
-      ...v, products, ...qtySummary,
-      profit: calcPlatformProfit(v.revenue, v.fees, matBase, "OFFLINE_MATERIAL_RATE"),
-    };
+    return calcOfflineVenueProfit({ ...v, products, ...qtySummary });
   });
 
   const naverShippingStats = calcNaverShippingStats(
@@ -206,7 +202,7 @@ function mergeSponsorshipData(
   const handmadeQuantity = merged.items
     .filter((i) => i.category === "handmade")
     .reduce((s, i) => s + i.quantity, 0);
-  const costPerHandmade = parseInt(process.env.REVIEW_MARKETING_COST_PER_HANDMADE ?? "0");
+  const costPerHandmade = REVIEW_MARKETING_COST_PER_HANDMADE;
 
   return { ...merged, totalQuantity, handmadeQuantity, marketingCost: handmadeQuantity * costPerHandmade };
 }
@@ -249,8 +245,9 @@ export async function updateReport(
   const sponsorship = mergeSponsorshipData(existing.sponsorship, updates.sponsorship);
 
   // 4) 파생 필드 재계산 (summary·ranking·matrix)
-  const derived = await rebuildDerivedFields(
-    platforms.naver, platforms.coupang, platforms.offline, sponsorship
+  const mapping = await loadProductMapping();
+  const derived = rebuildDerivedFields(
+    platforms.naver, platforms.coupang, platforms.offline, sponsorship, mapping
   );
 
   const updated: MonthlyReport = {

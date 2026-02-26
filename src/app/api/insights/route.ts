@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateSalesInsights } from "@/lib/ai/insights";
 import { loadReport, loadRecentHistory, updateReport } from "@/lib/storage/report-store";
+import { ENABLE_AI_INSIGHTS } from "@/lib/config";
 
 /**
  * POST /api/insights
@@ -14,7 +15,7 @@ import { loadReport, loadRecentHistory, updateReport } from "@/lib/storage/repor
 export async function POST(request: NextRequest) {
   try {
     // 활성화 플래그 체크
-    if (process.env.ENABLE_AI_INSIGHTS !== "true") {
+    if (!ENABLE_AI_INSIGHTS) {
       return NextResponse.json(
         { error: "AI 인사이트가 비활성화되어 있습니다. .env.local에 ENABLE_AI_INSIGHTS=true를 추가하세요." },
         { status: 403 }

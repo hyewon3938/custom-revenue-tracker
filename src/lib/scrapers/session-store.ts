@@ -1,16 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
 import { BrowserContext } from "playwright";
+import { SESSION_TTL_DAYS } from "@/lib/config";
 
 const SESSIONS_DIR = path.join(process.cwd(), ".browser-session");
 
-/**
- * 세션 유효기간.
- * SESSION_TTL_DAYS 환경변수로 조정 가능 (기본값: 30일).
- */
 function getSessionTtlMs(): number {
-  const days = parseInt(process.env.SESSION_TTL_DAYS ?? "30") || 30;
-  return days * 24 * 60 * 60 * 1_000;
+  return SESSION_TTL_DAYS * 24 * 60 * 60 * 1_000;
 }
 
 function sessionFilePath(platform: "naver" | "coupang"): string {
