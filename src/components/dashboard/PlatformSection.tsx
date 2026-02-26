@@ -36,8 +36,8 @@ function NetProfitRow({ value }: { value: number }) {
 
 function NaverCard({
   data,
-  onUpdate,
-}: {
+}: //onUpdate,
+{
   data: NaverData;
   onUpdate: (patch: object) => Promise<void>;
 }) {
@@ -297,10 +297,10 @@ export default function PlatformSection({
     totalCards <= 2
       ? "grid-cols-1 md:grid-cols-2"
       : totalCards === 3
-        ? "grid-cols-1 md:grid-cols-3"
-        : totalCards === 4
-          ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
-          : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+      ? "grid-cols-1 md:grid-cols-3"
+      : totalCards === 4
+      ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
+      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
 
   return (
     <section>
@@ -330,7 +330,10 @@ export default function PlatformSection({
             data={venue}
             productMatrix={productMatrix}
             onUpdate={async (patch: object) => {
-              await onUpdate({ ...(patch as Record<string, unknown>), offlineVenueId: venue.venueId });
+              await onUpdate({
+                ...(patch as Record<string, unknown>),
+                offlineVenueId: venue.venueId,
+              });
             }}
           />
         ))}

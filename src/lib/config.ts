@@ -51,8 +51,8 @@ export const SESSION_TTL_DAYS = envInt("SESSION_TTL_DAYS", 30);
 
 // ─── AI ─────────────────────────────────────────────────────────────────
 
-export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
-export const AI_MODEL = process.env.AI_MODEL ?? "claude-sonnet-4-20250514";
+export const GROQ_API_KEY = process.env.GROQ_API_KEY ?? "";
+export const AI_MODEL = process.env.AI_MODEL ?? "llama-3.3-70b-versatile";
 export const ENABLE_AI_INSIGHTS = process.env.ENABLE_AI_INSIGHTS === "true";
 
 // ─── 유사도 임계값 ──────────────────────────────────────────────────────

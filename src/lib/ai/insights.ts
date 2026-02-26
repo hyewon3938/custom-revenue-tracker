@@ -1,17 +1,54 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { MonthlyReport, SalesInsight } from "@/lib/types";
 import { formatKRW } from "@/lib/utils/format";
-import { ANTHROPIC_API_KEY, AI_MODEL } from "@/lib/config";
+import { GROQ_API_KEY, AI_MODEL } from "@/lib/config";
 
-// ─── Claude API 클라이언트 ──────────────────────────────────────────────
+// ─── Groq API (OpenAI 호환 REST) ───────────────────────────────────────
 
-function getClient(): Anthropic {
-  if (!ANTHROPIC_API_KEY) {
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+interface GroqMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+interface GroqResponse {
+  choices: { message: { content: string } }[];
+  error?: { message: string };
+}
+
+async function callGroq(messages: GroqMessage[]): Promise<string> {
+  if (!GROQ_API_KEY) {
     throw new Error(
-      "ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. .env.local에 추가하세요."
+      "GROQ_API_KEY 환경변수가 설정되지 않았습니다. .env.local에 추가하세요."
     );
   }
-  return new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+  const res = await fetch(GROQ_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: AI_MODEL,
+      messages,
+      temperature: 0.7,
+      max_tokens: 4096,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg = (body as GroqResponse).error?.message ?? `HTTP ${res.status}`;
+    throw new Error(`Groq API 오류: ${msg}`);
+  }
+
+  const data = (await res.json()) as GroqResponse;
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) {
+    throw new Error("Groq API에서 텍스트 응답을 받지 못했습니다.");
+  }
+  return text;
 }
 
 // ─── 헬퍼 함수 ─────────────────────────────────────────────────────────
@@ -347,7 +384,7 @@ type 분류:
 // ─── 메인 함수 ─────────────────────────────────────────────────────────
 
 /**
- * Claude API를 사용해 월간 판매 인사이트 생성.
+ * Groq API (Llama 3.3)를 사용해 월간 판매 인사이트 생성.
  * history: [전달, 전전달, 전전전달] 순. 없으면 당월 데이터만으로 분석.
  */
 export async function generateSalesInsights(
@@ -356,24 +393,15 @@ export async function generateSalesInsights(
 ): Promise<SalesInsight[]> {
   const prompt = buildPrompt(report, history);
 
-  const message = await getClient().messages.create({
-    model: AI_MODEL,
-    max_tokens: 3000,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `다음 판매 데이터를 분석하여 핵심 인사이트 7~10개를 JSON 배열로 제공해주세요.\n\n${prompt}`,
-      },
-    ],
-  });
+  const text = await callGroq([
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `다음 판매 데이터를 분석하여 핵심 인사이트 7~10개를 JSON 배열로 제공해주세요.\n\n${prompt}`,
+    },
+  ]);
 
-  const textBlock = message.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Claude API에서 텍스트 응답을 받지 못했습니다.");
-  }
-
-  const jsonMatch = textBlock.text.trim().match(/\[[\s\S]*\]/);
+  const jsonMatch = text.trim().match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
     throw new Error("인사이트 JSON 파싱 실패");
   }
