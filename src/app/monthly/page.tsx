@@ -9,6 +9,7 @@ import RankingSection from "@/components/dashboard/RankingSection";
 import MatrixSection from "@/components/dashboard/MatrixSection";
 import InsightsSection from "@/components/dashboard/InsightsSection";
 import ScrapeWarningBanner from "@/components/dashboard/ScrapeWarningBanner";
+import VersionHistoryModal from "@/components/dashboard/VersionHistoryModal";
 
 const THIS_YEAR = new Date().getFullYear();
 const THIS_MONTH = new Date().getMonth() + 1;
@@ -22,6 +23,8 @@ export default function MonthlyPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCollecting, setIsCollecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
+  const [restoreBanner, setRestoreBanner] = useState<string | null>(null);
 
   // 저장된 레포트 목록 초기 로드
   useEffect(() => {
@@ -134,6 +137,15 @@ export default function MonthlyPage() {
     }
   };
 
+  // 버전 복구
+  const handleRestore = (restored: MonthlyReport) => {
+    setReport(restored);
+    setRestoreBanner(
+      `${selectedYear}년 ${selectedMonth}월 이전 버전으로 복구되었습니다. 현재 데이터는 백업되었습니다.`
+    );
+    setTimeout(() => setRestoreBanner(null), 8000);
+  };
+
   const hasSaved = savedList.some(
     (r) => r.year === selectedYear && r.month === selectedMonth
   );
@@ -183,19 +195,42 @@ export default function MonthlyPage() {
           )}
         </div>
 
-        <button
-          onClick={handleCollect}
-          disabled={isCollecting}
-          className="px-5 py-2.5 bg-brand-500 text-white font-medium rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isCollecting ? "수집 중..." : hasSaved ? "재수집" : "데이터 수집"}
-        </button>
+        <div className="flex items-center gap-3">
+          {report && (
+            <button
+              onClick={() => setIsVersionModalOpen(true)}
+              className="text-sm text-brand-500 hover:text-brand-700 transition-colors"
+            >
+              버전 이력
+            </button>
+          )}
+          <button
+            onClick={handleCollect}
+            disabled={isCollecting}
+            className="px-5 py-2.5 bg-brand-500 text-white font-medium rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isCollecting ? "수집 중..." : hasSaved ? "재수집" : "데이터 수집"}
+          </button>
+        </div>
       </div>
 
       {/* ─── 오류 ────────────────────────────────────────────────────── */}
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {error}
+        </div>
+      )}
+
+      {/* ─── 복구 안내 ─────────────────────────────────────────────── */}
+      {restoreBanner && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center justify-between">
+          <span>{restoreBanner}</span>
+          <button
+            onClick={() => setRestoreBanner(null)}
+            className="text-blue-400 hover:text-blue-600 ml-4 shrink-0"
+          >
+            &times;
+          </button>
         </div>
       )}
 
@@ -256,6 +291,15 @@ export default function MonthlyPage() {
           />
         </>
       )}
+
+      {/* ─── 버전 이력 모달 ────────────────────────────────────────── */}
+      <VersionHistoryModal
+        isOpen={isVersionModalOpen}
+        onClose={() => setIsVersionModalOpen(false)}
+        year={selectedYear}
+        month={selectedMonth}
+        onRestore={handleRestore}
+      />
     </div>
   );
 }
