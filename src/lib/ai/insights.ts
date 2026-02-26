@@ -366,10 +366,13 @@ const SYSTEM_PROMPT = `당신은 핸드메이드 끈갈피(비즈 책갈피) 판
 반드시 아래 JSON 배열 형식으로만 출력하세요. 추가 설명 없이 JSON만 반환하세요.
 인사이트는 7~10개를 생성하세요.
 
+description 안에서 핵심 수치, 상품명, 행동 권장 사항은 **볼드 마커**로 강조하세요.
+예시: "매출이 **153,000원에서 220,000원으로 43.8% 증가**했으며, **쿠팡 채널 집중 노출**을 권장합니다."
+
 [
   {
     "title": "인사이트 제목 (15자 이내, 핵심 키워드 포함)",
-    "description": "구체적인 설명과 행동 권장 사항 (150자 이내, 수치 포함)",
+    "description": "구체적인 설명과 행동 권장 사항 (150자 이내, 수치 포함, **핵심 강조**)",
     "type": "positive | negative | neutral | action",
     "category": "revenue | profit | product | platform | ad | sponsorship | trend"
   }
