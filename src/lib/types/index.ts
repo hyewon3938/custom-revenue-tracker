@@ -194,6 +194,14 @@ export type DeepPartial<T> = T extends object
   ? { [K in keyof T]?: DeepPartial<T[K]> }
   : T;
 
+// ─── 수집 경고 ──────────────────────────────────────────────────────────────
+export type WarningLevel = "error" | "warn";
+
+export interface ScrapeWarning {
+  level: WarningLevel;
+  message: string; // 한국어 사용자 메시지
+}
+
 // ─── 월별 종합 레포트 (저장/편집 단위) ───────────────────────────────────
 export interface MonthlyReport {
   period: { year: number; month: number };
@@ -211,6 +219,7 @@ export interface MonthlyReport {
   sponsorExcludedRanking: ProductRankEntry[]; // 협찬 제외 TOP5
   productMatrix: ProductMatrixRow[]; // 상품 × 플랫폼 표
   insights: SalesInsight[];
+  warnings: ScrapeWarning[];  // 수집 시 경고
   collectedAt: string; // ISO 8601
   lastModifiedAt: string; // ISO 8601
 }

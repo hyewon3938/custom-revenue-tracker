@@ -8,6 +8,7 @@ import SponsorshipCard from "@/components/dashboard/SponsorshipCard";
 import RankingSection from "@/components/dashboard/RankingSection";
 import MatrixSection from "@/components/dashboard/MatrixSection";
 import InsightsSection from "@/components/dashboard/InsightsSection";
+import ScrapeWarningBanner from "@/components/dashboard/ScrapeWarningBanner";
 
 const THIS_YEAR = new Date().getFullYear();
 const THIS_MONTH = new Date().getMonth() + 1;
@@ -216,6 +217,8 @@ export default function MonthlyPage() {
       {/* ─── 대시보드 섹션 ───────────────────────────────────────────── */}
       {report && !isLoading && (
         <>
+          <ScrapeWarningBanner warnings={report.warnings ?? []} />
+
           <OverallSummarySection summary={report.summary} />
 
           <PlatformSection

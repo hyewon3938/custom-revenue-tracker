@@ -64,6 +64,8 @@ function migrateReport(raw: Record<string, unknown>): MonthlyReport {
     if (naver.shippingCollected === undefined) naver.shippingCollected = 0;
     if (naver.payerCount === undefined) naver.payerCount = 0;
   }
+  // warnings 필드 없는 기존 레포트 호환
+  if (!raw.warnings) raw.warnings = [];
   return raw as unknown as MonthlyReport;
 }
 

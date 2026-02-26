@@ -1,5 +1,11 @@
 import { chromium, Browser, BrowserContext, Page } from "playwright";
-import { NaverData, CoupangData, PlatformFees } from "@/lib/types";
+import {
+  NaverData,
+  CoupangData,
+  PlatformFees,
+  ScrapeWarning,
+  ProductSales,
+} from "@/lib/types";
 import { pad } from "@/lib/utils/format";
 import { loginNaver } from "./naver-auth";
 import { loginCoupang } from "./coupang-auth";
@@ -15,6 +21,8 @@ import {
   naverMaterialBase,
   coupangMaterialBase,
 } from "@/lib/calculations/profit";
+import { withRetry } from "./with-retry";
+import { validateCollectedData } from "./validate";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -72,26 +80,74 @@ export function getDateRange(
   };
 }
 
+// ─── 플랫폼별 수집 (재시도 포함) ─────────────────────────────────────────
+
 async function collectNaverData(
   year: number,
   month: number
-): Promise<NaverData> {
+): Promise<{ data: NaverData; warnings: ScrapeWarning[] }> {
   const sessionPath = await getValidSessionPath("naver");
   const { browser, context, page } = await createBrowserPage(sessionPath);
+  const warnings: ScrapeWarning[] = [];
 
   try {
     await loginNaver(page, context);
 
-    // 순차 수집 (세션 공유)
-    const salesResult = await scrapeNaverSalesAnalysis(page, year, month).catch(
-      (e) => { console.error("[naver-sales]", e); return null; }
+    // 각 스크레이퍼를 재시도 래퍼로 실행
+    const salesAttempt = await withRetry(
+      "naver-sales",
+      () => scrapeNaverSalesAnalysis(page, year, month),
+      null
     );
-    const settlementResult = await scrapeNaverSettlement(page, year, month).catch(
-      (e) => { console.error("[naver-settlement]", e); return null; }
+    if (salesAttempt.failed) {
+      warnings.push({
+        level: "error",
+        message: `네이버 판매분석 수집 실패 (재시도 포함): ${salesAttempt.error}`,
+      });
+    } else if (salesAttempt.retried) {
+      warnings.push({
+        level: "warn",
+        message: "네이버 판매분석 첫 번째 시도 실패 후 재시도로 수집 성공.",
+      });
+    }
+
+    const settlementAttempt = await withRetry(
+      "naver-settlement",
+      () => scrapeNaverSettlement(page, year, month),
+      null
     );
-    const productsResult = await scrapeNaverOrders(page, year, month).catch(
-      (e) => { console.error("[naver-orders]", e); return []; }
+    if (settlementAttempt.failed) {
+      warnings.push({
+        level: "error",
+        message: `네이버 정산내역 수집 실패 (재시도 포함): ${settlementAttempt.error}`,
+      });
+    } else if (settlementAttempt.retried) {
+      warnings.push({
+        level: "warn",
+        message: "네이버 정산내역 첫 번째 시도 실패 후 재시도로 수집 성공.",
+      });
+    }
+
+    const ordersAttempt = await withRetry(
+      "naver-orders",
+      () => scrapeNaverOrders(page, year, month),
+      [] as ProductSales[]
     );
+    if (ordersAttempt.failed) {
+      warnings.push({
+        level: "error",
+        message: `네이버 주문 수집 실패 (재시도 포함): ${ordersAttempt.error}`,
+      });
+    } else if (ordersAttempt.retried) {
+      warnings.push({
+        level: "warn",
+        message: "네이버 주문 첫 번째 시도 실패 후 재시도로 수집 성공.",
+      });
+    }
+
+    const salesResult = salesAttempt.data;
+    const settlementResult = settlementAttempt.data;
+    const products = ordersAttempt.data;
 
     const revenue = salesResult?.totalRevenue ?? 0;
     const shippingCollected = salesResult?.shippingCollected ?? 0;
@@ -103,25 +159,27 @@ async function collectNaverData(
       adFee: 0,
       settlementAmount: settlementResult?.settlementAmount ?? 0,
     };
-    const products = productsResult ?? [];
     const handmadeQuantity = products
       .filter((p) => p.category === "handmade")
       .reduce((s, p) => s + p.quantity, 0);
     const totalQuantity = products.reduce((s, p) => s + p.quantity, 0);
 
     return {
-      revenue,
-      shippingCollected,
-      payerCount,
-      totalQuantity,
-      handmadeQuantity,
-      otherQuantity: totalQuantity - handmadeQuantity,
-      fees,
-      shippingStats,
-      profit: calcPlatformProfit(
-        revenue, fees, naverMaterialBase(revenue, shippingCollected)
-      ),
-      products,
+      data: {
+        revenue,
+        shippingCollected,
+        payerCount,
+        totalQuantity,
+        handmadeQuantity,
+        otherQuantity: totalQuantity - handmadeQuantity,
+        fees,
+        shippingStats,
+        profit: calcPlatformProfit(
+          revenue, fees, naverMaterialBase(revenue, shippingCollected)
+        ),
+        products,
+      },
+      warnings,
     };
   } finally {
     await context.close();
@@ -132,19 +190,50 @@ async function collectNaverData(
 async function collectCoupangData(
   year: number,
   month: number
-): Promise<CoupangData> {
+): Promise<{ data: CoupangData; warnings: ScrapeWarning[] }> {
   const sessionPath = await getValidSessionPath("coupang");
   const { browser, context, page } = await createBrowserPage(sessionPath);
+  const warnings: ScrapeWarning[] = [];
 
   try {
     await loginCoupang(page, context);
 
-    const salesResult = await scrapeCoupangSalesAnalysis(page, year, month).catch(
-      (e) => { console.error("[coupang-sales]", e); return null; }
+    const salesAttempt = await withRetry(
+      "coupang-sales",
+      () => scrapeCoupangSalesAnalysis(page, year, month),
+      null
     );
-    const settlementResult = await scrapeCoupangSettlement(page, year, month).catch(
-      (e) => { console.error("[coupang-settlement]", e); return null; }
+    if (salesAttempt.failed) {
+      warnings.push({
+        level: "error",
+        message: `쿠팡 판매분석 수집 실패 (재시도 포함): ${salesAttempt.error}`,
+      });
+    } else if (salesAttempt.retried) {
+      warnings.push({
+        level: "warn",
+        message: "쿠팡 판매분석 첫 번째 시도 실패 후 재시도로 수집 성공.",
+      });
+    }
+
+    const settlementAttempt = await withRetry(
+      "coupang-settlement",
+      () => scrapeCoupangSettlement(page, year, month),
+      null
     );
+    if (settlementAttempt.failed) {
+      warnings.push({
+        level: "error",
+        message: `쿠팡 정산 수집 실패 (재시도 포함): ${settlementAttempt.error}`,
+      });
+    } else if (settlementAttempt.retried) {
+      warnings.push({
+        level: "warn",
+        message: "쿠팡 정산 첫 번째 시도 실패 후 재시도로 수집 성공.",
+      });
+    }
+
+    const salesResult = salesAttempt.data;
+    const settlementResult = settlementAttempt.data;
 
     const revenue = settlementResult?.revenue ?? 0;
     const fees: PlatformFees = {
@@ -160,15 +249,18 @@ async function collectCoupangData(
     const totalQuantity = products.reduce((s, p) => s + p.quantity, 0);
 
     return {
-      revenue,
-      totalQuantity,
-      handmadeQuantity,
-      otherQuantity: totalQuantity - handmadeQuantity,
-      fees,
-      profit: calcPlatformProfit(
-        revenue, fees, coupangMaterialBase(revenue, totalQuantity)
-      ),
-      products,
+      data: {
+        revenue,
+        totalQuantity,
+        handmadeQuantity,
+        otherQuantity: totalQuantity - handmadeQuantity,
+        fees,
+        profit: calcPlatformProfit(
+          revenue, fees, coupangMaterialBase(revenue, totalQuantity)
+        ),
+        products,
+      },
+      warnings,
     };
   } finally {
     await context.close();
@@ -176,9 +268,12 @@ async function collectCoupangData(
   }
 }
 
+// ─── 오케스트레이터 ─────────────────────────────────────────────────────
+
 /**
- * 네이버·쿠팡 데이터를 수집해 원시 결과만 반환.
- * 오프라인/협찬/매핑 동기화/파생 필드 계산은 호출자(scrape/route.ts)가 담당.
+ * 네이버·쿠팡 데이터를 수집해 원시 결과 + 경고를 반환.
+ * 각 스크레이퍼는 실패 시 1회 자동 재시도.
+ * 수집 후 데이터 정합성 검증을 수행해 경고 목록을 합산.
  */
 export async function collectMonthlyData(
   year: number,
@@ -188,13 +283,45 @@ export async function collectMonthlyData(
   coupang: CoupangData;
   period: { year: number; month: number };
   dataRange: { start: string; end: string };
+  warnings: ScrapeWarning[];
 }> {
   const dataRange = getDateRange(year, month);
 
-  const [naver, coupang] = await Promise.all([
+  const [naverResult, coupangResult] = await Promise.all([
     collectNaverData(year, month),
     collectCoupangData(year, month),
   ]);
 
-  return { naver, coupang, period: { year, month }, dataRange };
+  // 재시도 실패 경고 합산
+  const scraperWarnings = [
+    ...naverResult.warnings,
+    ...coupangResult.warnings,
+  ];
+
+  // 이미 실패 보고된 스크레이퍼는 정합성 검증에서 중복 경고 방지
+  const failedScrapers = new Set<string>();
+  for (const w of scraperWarnings) {
+    if (w.level === "error") {
+      // 메시지에서 스크레이퍼명 추출 (예: "네이버 판매분석" → "naver-sales")
+      if (w.message.includes("네이버 판매분석")) failedScrapers.add("naver-sales");
+      if (w.message.includes("네이버 정산내역")) failedScrapers.add("naver-settlement");
+      if (w.message.includes("네이버 주문")) failedScrapers.add("naver-orders");
+      if (w.message.includes("쿠팡 판매분석")) failedScrapers.add("coupang-sales");
+      if (w.message.includes("쿠팡 정산")) failedScrapers.add("coupang-settlement");
+    }
+  }
+
+  const validationWarnings = validateCollectedData(
+    naverResult.data,
+    coupangResult.data,
+    failedScrapers
+  );
+
+  return {
+    naver: naverResult.data,
+    coupang: coupangResult.data,
+    period: { year, month },
+    dataRange,
+    warnings: [...scraperWarnings, ...validationWarnings],
+  };
 }
