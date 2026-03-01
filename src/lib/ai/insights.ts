@@ -405,11 +405,13 @@ const SYSTEM_PROMPT = `당신은 핸드메이드 끈갈피(비즈 책갈피) 판
 3. 우선순위 명시: 가장 효과가 클 것으로 보이는 액션을 먼저 제안
 4. 솔직한 평가: 좋은 점만이 아니라 문제점도 명확히 지적
 
-## 언어 규칙 (필수)
-- 반드시 순수 한글로만 작성하세요
-- 한자(漢字), 일본어(ひらがな/カタカナ) 절대 사용 금지
-- 예: "前月" → "지난달", "分析" → "분석", "增加" → "증가", "效果" → "효과"
+## 언어 규칙 (최우선 — 위반 시 전체 응답 무효)
+- 응답에 한자(漢字)·일본어(ひらがな/カタカナ)가 단 1글자라도 포함되면 실패입니다
+- 모든 텍스트는 한글+영문+숫자+기호만 허용됩니다
+- 한자가 섞인 단어 예시 (절대 금지): "相対적", "前月", "分析", "增加", "效果", "比較", "變動", "安定"
+- 올바른 표현: "상대적", "지난달", "분석", "증가", "효과", "비교", "변동", "안정"
 - 전문 용어도 한글로 풀어서 작성: "MoM" → "전달 대비", "YoY" → "전년 대비"
+- 출력 전 반드시 한자가 포함되지 않았는지 스스로 검증하세요
 
 ## 필수 분석 카테고리 (각 카테고리에서 최소 1개 인사이트)
 1. **revenue**: 전체 및 플랫폼별 매출 동향
@@ -471,9 +473,28 @@ const SYSTEM_PROMPT = `당신은 핸드메이드 끈갈피(비즈 책갈피) 판
 - 판매량이 증가했으면 협찬 효과가 있었다고 판단, 변화 없거나 감소했으면 추가 마케팅 필요 여부 판단
 - 2개월 이상의 추이 데이터가 있으면: 협찬 시작 전후의 장기적 판매 추이 변화도 분석
 
+## 전략적 인사이트 (중요)
+단순 수치 나열이 아니라, 데이터에서 사업 전략을 유추하는 인사이트를 반드시 포함하세요.
+
+좋은 예:
+- 계절별 매출 패턴에서 시즌 상품 개발 기회 발견
+- 특정 상품의 플랫폼 간 판매 편차에서 교차 마케팅 기회 포착
+- 마진율 추이에서 가격 정책 조정 타이밍 제안
+- 오프라인 입점 확대 시기나 신규 채널 진출 전략
+
+나쁜 예 (금지):
+- "~를 고려해볼 필요가 있다" 같은 애매한 결론
+- 데이터에서 바로 읽히는 수치를 그대로 반복 (예: "매출이 X원이다")
+- 근거 없는 일반론 (예: "마케팅을 강화해야 합니다")
+
 ## 출력 형식
 반드시 아래 JSON 배열 형식으로만 출력하세요. 추가 설명 없이 JSON만 반환하세요.
 인사이트는 7~12개를 생성하세요. 전체 기간 개요 데이터가 있으면 장기 추세 인사이트도 포함하세요.
+
+### type별 최소 개수 (필수)
+- **action**: 최소 2개 (구체적이고 즉시 실행 가능한 액션)
+- **positive 또는 negative**: 합쳐서 최소 3개
+- 나머지는 데이터에 맞게 자유 배분
 
 description 안에서 핵심 수치, 상품명, 행동 권장 사항은 **볼드 마커**로 강조하세요.
 예시: "매출이 **153,000원에서 220,000원으로 43.8% 증가**했으며, **쿠팡 채널 집중 노출**을 권장합니다."
@@ -493,12 +514,163 @@ type 분류:
 - neutral: 중립적 관찰이나 참고 정보
 - action: 즉시 실행 가능한 구체적 액션 아이템`;
 
+// ─── 타입 분포 검증 ───────────────────────────────────────────────────
+
+/** type별 최소 요구 개수 */
+const ACTION_MIN = 2;
+const POS_NEG_MIN = 3;
+
+interface TypeDeficit {
+  action: number; // 부족한 action 개수
+  posNeg: number; // 부족한 positive+negative 개수
+}
+
+/** 인사이트 배열의 타입 분포를 검증하여 부족분을 반환 */
+function findTypeDeficit(insights: SalesInsight[]): TypeDeficit {
+  const actionCount = insights.filter((i) => i.type === "action").length;
+  const posNegCount = insights.filter(
+    (i) => i.type === "positive" || i.type === "negative"
+  ).length;
+
+  return {
+    action: Math.max(0, ACTION_MIN - actionCount),
+    posNeg: Math.max(0, POS_NEG_MIN - posNegCount),
+  };
+}
+
+/** 부족한 타입만 보충 요청하는 프롬프트 생성 */
+function buildSupplementPrompt(
+  existing: SalesInsight[],
+  deficit: TypeDeficit
+): string {
+  const existingList = existing
+    .map((i) => `- [${i.type}] ${i.title}`)
+    .join("\n");
+
+  const requests: string[] = [];
+  if (deficit.action > 0) {
+    requests.push(
+      `- **action** 타입 ${deficit.action}개 (구체적이고 즉시 실행 가능한 액션)`
+    );
+  }
+  if (deficit.posNeg > 0) {
+    requests.push(
+      `- **positive 또는 negative** 타입 ${deficit.posNeg}개`
+    );
+  }
+
+  return `기존에 생성된 인사이트:
+${existingList}
+
+위 인사이트에서 아래 타입이 부족합니다. **기존 인사이트와 중복되지 않는 새로운 관점**으로 추가 생성해주세요:
+
+${requests.join("\n")}
+
+동일한 JSON 배열 형식으로 추가할 인사이트만 반환하세요.`;
+}
+
+// ─── 한자→한글 치환 (후처리 안전망) ────────────────────────────────────
+
+/** 자주 혼입되는 한자→한글 치환 맵 (긴 패턴 우선 매칭) */
+const CJK_REPLACE_MAP: [string, string][] = [
+  // 3글자
+  ["相対的", "상대적"],
+  ["安定的", "안정적"],
+  ["效果的", "효과적"],
+  ["戰略的", "전략적"],
+  ["積極的", "적극적"],
+  ["具體的", "구체적"],
+  ["全體的", "전체적"],
+  ["比較的", "비교적"],
+  ["持續的", "지속적"],
+  ["長期的", "장기적"],
+  ["短期的", "단기적"],
+  // 2글자
+  ["相対", "상대"],
+  ["前月", "전월"],
+  ["分析", "분석"],
+  ["增加", "증가"],
+  ["減少", "감소"],
+  ["效果", "효과"],
+  ["比較", "비교"],
+  ["變動", "변동"],
+  ["安定", "안정"],
+  ["收益", "수익"],
+  ["費用", "비용"],
+  ["販賣", "판매"],
+  ["成長", "성장"],
+  ["改善", "개선"],
+  ["戰略", "전략"],
+  ["推薦", "추천"],
+  ["廣告", "광고"],
+  ["營業", "영업"],
+  ["投資", "투자"],
+  ["利益", "이익"],
+  ["維持", "유지"],
+  ["擴大", "확대"],
+  ["縮小", "축소"],
+  ["上昇", "상승"],
+  ["下落", "하락"],
+  ["需要", "수요"],
+  ["供給", "공급"],
+  ["平均", "평균"],
+  ["最大", "최대"],
+  ["最小", "최소"],
+  ["全體", "전체"],
+  ["部分", "부분"],
+  ["現在", "현재"],
+  ["期間", "기간"],
+  ["達成", "달성"],
+  ["目標", "목표"],
+  ["强化", "강화"],
+  ["集中", "집중"],
+  ["活用", "활용"],
+  ["轉換", "전환"],
+  ["推移", "추이"],
+  ["傾向", "경향"],
+];
+
+/** 매핑에 없는 잔여 한자 제거용 */
+const CJK_REGEX = /[\u3400-\u4DBF\u4E00-\u9FFF]/g;
+
+/** 한자→한글 치환 후 잔여 한자 제거 */
+export function sanitizeText(value: string): string {
+  let result = value;
+  for (const [cjk, korean] of CJK_REPLACE_MAP) {
+    result = result.replaceAll(cjk, korean);
+  }
+  return result.replace(CJK_REGEX, "");
+}
+
+/** 인사이트 배열에서 한자를 치환/제거 (후처리 안전망) */
+function sanitizeInsights(insights: SalesInsight[]): SalesInsight[] {
+  return insights.map((i) => ({
+    ...i,
+    title: sanitizeText(i.title),
+    description: sanitizeText(i.description),
+  }));
+}
+
+/** JSON 배열 응답에서 SalesInsight[] 파싱 (실패 시 null) */
+function parseInsightsJson(text: string): SalesInsight[] | null {
+  const match = text.trim().match(/\[[\s\S]*\]/);
+  if (!match) return null;
+  try {
+    return sanitizeInsights(JSON.parse(match[0]) as SalesInsight[]);
+  } catch {
+    return null;
+  }
+}
+
 // ─── 메인 함수 ─────────────────────────────────────────────────────────
 
 /**
  * Groq API (Llama 3.3)를 사용해 월간 판매 인사이트 생성.
  * history: [전달, 전전달, 전전전달] 순. 없으면 당월 데이터만으로 분석.
  * overview: 전체 기간 월별 개요 데이터 (장기 추세 분석용).
+ *
+ * 1차 생성 후 타입 분포를 검증하여, 부족한 타입이 있으면
+ * 보충 요청(2차 호출)으로 기존 인사이트를 보존하면서 누락 타입만 추가.
  */
 export async function generateSalesInsights(
   report: Report,
@@ -507,18 +679,40 @@ export async function generateSalesInsights(
 ): Promise<SalesInsight[]> {
   const prompt = buildPrompt(report, history, overview);
 
-  const text = await callGroq([
-    { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: `다음 판매 데이터를 분석하여 핵심 인사이트 7~12개를 JSON 배열로 제공해주세요.\n\n${prompt}`,
-    },
-  ]);
+  const systemMessage: GroqMessage = {
+    role: "system",
+    content: SYSTEM_PROMPT,
+  };
+  const dataMessage: GroqMessage = {
+    role: "user",
+    content: `다음 판매 데이터를 분석하여 핵심 인사이트 7~12개를 JSON 배열로 제공해주세요.\n\n${prompt}`,
+  };
 
-  const jsonMatch = text.trim().match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
+  // ── 1차: 메인 인사이트 생성 ──
+  const text = await callGroq([systemMessage, dataMessage]);
+
+  const insights = parseInsightsJson(text);
+  if (!insights) {
     throw new Error("인사이트 JSON 파싱 실패");
   }
 
-  return JSON.parse(jsonMatch[0]) as SalesInsight[];
+  // ── 2차: 타입 분포 검증 → 부족하면 보충 ──
+  const deficit = findTypeDeficit(insights);
+  if (deficit.action === 0 && deficit.posNeg === 0) {
+    return insights; // 모든 타입 충족 → 바로 반환
+  }
+
+  const supplementText = await callGroq([
+    systemMessage,
+    dataMessage,
+    { role: "assistant", content: JSON.stringify(insights) },
+    { role: "user", content: buildSupplementPrompt(insights, deficit) },
+  ]);
+
+  const supplement = parseInsightsJson(supplementText);
+  if (!supplement) {
+    return insights; // 보충 파싱 실패 → 원본 반환
+  }
+
+  return [...insights, ...supplement];
 }
