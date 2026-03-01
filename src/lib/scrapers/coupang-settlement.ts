@@ -177,5 +177,16 @@ export async function scrapeCoupangSettlement(
     })()
   `) as { revenue: number; logisticsFee: number; adFee: number; commissionFee: number };
 
+  // 매출이 있는데 비용이 전부 0이면 파싱 실패로 판단
+  if (
+    data.revenue > 0 &&
+    data.commissionFee === 0 &&
+    data.logisticsFee === 0
+  ) {
+    throw new Error(
+      `쿠팡 정산 비용 파싱 실패: 매출 ${data.revenue}원이지만 수수료/물류비 모두 0원`
+    );
+  }
+
   return data;
 }

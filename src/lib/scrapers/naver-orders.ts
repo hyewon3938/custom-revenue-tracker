@@ -1,16 +1,9 @@
 import { Page, Frame } from "playwright";
-import { ProductSales, ProductCategory } from "@/lib/types";
+import { ProductSales } from "@/lib/types";
+import { detectCategory } from "@/lib/calculations/product";
 import { NAVER_URLS, getContentFrame } from "./naver-auth";
 import { setDateRangeWithCalendar } from "./naver-datepicker";
 import { goToNextPageInGrid } from "./naver-utils";
-
-/** 상품명으로 카테고리 자동 판별 (끈갈피 = handmade) */
-export function detectCategory(productName: string): ProductCategory {
-  const handmadeKeywords = ["끈갈피", "북마크", "책갈피"];
-  return handmadeKeywords.some((kw) => productName.includes(kw))
-    ? "handmade"
-    : "other";
-}
 
 /**
  * TOAST UI Grid에서 현재 페이지의 주문 행을 추출.

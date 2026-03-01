@@ -1,0 +1,17 @@
+{
+  "mappings": [
+    {
+      "canonical": "상품 공통명 A",
+      "naver": "네이버 스마트스토어 상품명 A (전체 상품명)",
+      "coupang": "쿠팡 상품명 A (전체 상품명)"
+    },
+    {
+      "canonical": "상품 공통명 B",
+      "naver": "네이버 스마트스토어 상품명 B"
+    },
+    {
+      "canonical": "상품 공통명 C",
+      "coupang": "쿠팡 상품명 C"
+    }
+  ]
+}

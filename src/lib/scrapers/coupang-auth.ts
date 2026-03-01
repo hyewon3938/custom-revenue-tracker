@@ -3,8 +3,8 @@ import { saveSession } from "./session-store";
 
 export const COUPANG_BASE = "https://wing.coupang.com";
 
-/** 2자리 zero-padding */
-export const pad = (n: number): string => String(n).padStart(2, "0");
+// pad는 @/lib/utils/format에서 re-export (기존 import 경로 유지)
+export { pad } from "@/lib/utils/format";
 
 export const COUPANG_URLS = {
   home: COUPANG_BASE,

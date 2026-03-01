@@ -1,5 +1,5 @@
 {
-  "name": "leecommit-sales-dashboard",
+  "name": "custom-revenue-tracker",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -15,10 +15,10 @@
     "test:naver": "npx tsx scripts/test-naver.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
     "next": "15.1.7",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.1",

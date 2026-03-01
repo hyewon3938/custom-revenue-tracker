@@ -1,6 +1,5 @@
 import { Frame } from "playwright";
-
-const pad = (n: number) => String(n).padStart(2, "0");
+import { pad } from "@/lib/utils/format";
 
 /**
  * 종료일 계산:

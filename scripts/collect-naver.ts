@@ -30,10 +30,12 @@ const fmt = (n: number) => n.toLocaleString("ko-KR") + "원";
     // ── 판매분석 ──
     console.log("[1/3] 판매분석 수집 중...");
     const sales = await scrapeNaverSalesAnalysis(page, YEAR, MONTH);
+    const { calcNaverShippingStats } = await import("@/lib/calculations/profit");
+    const shippingStats = calcNaverShippingStats(sales.shippingCollected, sales.payerCount);
     console.log("  매출:", fmt(sales.totalRevenue));
     console.log("  결제자수:", sales.payerCount, "명");
-    console.log("  배송 - 일반:", sales.shippingStats.regularCount, "건 / 무료:", sales.shippingStats.freeCount, "건");
-    console.log("  판매자 배송비 부담:", fmt(sales.shippingStats.sellerCost));
+    console.log("  배송 - 유료:", shippingStats.regularCount, "건 / 무료:", shippingStats.freeCount, "건");
+    console.log("  판매자 배송비 부담:", fmt(shippingStats.sellerCost));
 
     // ── 정산내역 ──
     console.log("\n[2/3] 정산내역 수집 중...");
@@ -49,7 +51,7 @@ const fmt = (n: number) => n.toLocaleString("ko-KR") + "원";
 
     // ── 최종 요약 ──
     const materialCost = Math.round(sales.totalRevenue * 0.15);
-    const platformFee = settlement.commissionFee + sales.shippingStats.sellerCost;
+    const platformFee = settlement.commissionFee + shippingStats.sellerCost;
     const grossProfit = sales.totalRevenue - platformFee;
     const netProfit = grossProfit - materialCost;
 
@@ -58,7 +60,7 @@ const fmt = (n: number) => n.toLocaleString("ko-KR") + "원";
     console.log("══════════════════════════════════");
     console.log("  매출:          ", fmt(sales.totalRevenue));
     console.log("  수수료:        ", fmt(settlement.commissionFee));
-    console.log("  배송비(부담):  ", fmt(sales.shippingStats.sellerCost));
+    console.log("  배송비(부담):  ", fmt(shippingStats.sellerCost));
     console.log("  부자재비(15%): ", fmt(materialCost));
     console.log("  ──────────────────────────────");
     console.log("  플랫폼 순이익: ", fmt(netProfit));

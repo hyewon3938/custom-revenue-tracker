@@ -1,0 +1,67 @@
+"use client";
+
+import { useCallback } from "react";
+import { SponsorshipData, SponsoredItem, ProductMatrixRow } from "@/lib/types";
+import Card from "@/components/ui/Card";
+import EditRow from "@/components/ui/EditRow";
+import ProductQtyEditor from "./ProductQtyEditor";
+
+interface Props {
+  sponsorship: SponsorshipData;
+  productMatrix: ProductMatrixRow[];
+  onUpdate: (patch: object) => Promise<void>;
+}
+
+export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }: Props) {
+  const saveItems = useCallback(
+    async (quantities: Record<string, number>) => {
+      const items: SponsoredItem[] = productMatrix
+        .filter((row) => (quantities[row.productName] ?? 0) > 0)
+        .map((row) => ({
+          productName: row.productName,
+          category: row.category,
+          quantity: quantities[row.productName],
+        }));
+      await onUpdate({ sponsorship: { items } });
+    },
+    [productMatrix, onUpdate]
+  );
+
+  return (
+    <section>
+      <h3 className="text-lg font-semibold text-gray-800 mb-3">협찬 마케팅</h3>
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-semibold text-gray-900">협찬 현황</h4>
+          <span className="text-xs font-bold bg-warm-200 text-warm-700 px-2 py-0.5 rounded-full">
+            협찬
+          </span>
+        </div>
+
+        {/* 마케팅 비용 */}
+        <EditRow
+          label="마케팅 비용"
+          value={sponsorship.marketingCost}
+          onSave={(v) => onUpdate({ sponsorship: { marketingCost: v } })}
+        />
+
+        {sponsorship.marketingCost > 0 && (
+          <p className="text-xs text-gray-400 mt-1 mb-2">
+            순이익에서 {sponsorship.marketingCost.toLocaleString("ko-KR")}원 차감됩니다.
+          </p>
+        )}
+
+        {/* 협찬 상품 수량 편집기 */}
+        <ProductQtyEditor
+          label="협찬 상품"
+          savedItems={sponsorship.items}
+          editList={productMatrix}
+          totalQuantity={sponsorship.totalQuantity}
+          handmadeQuantity={sponsorship.handmadeQuantity}
+          summaryPrefix="총 제공량"
+          onSave={saveItems}
+        />
+      </Card>
+    </section>
+  );
+}

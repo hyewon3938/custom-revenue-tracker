@@ -65,7 +65,11 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { year, month, naver, coupang, offline, insights } = body;
+    const {
+      year, month, naver, coupang, offline,
+      offlineVenueId, addOfflineVenue, removeOfflineVenueId,
+      sponsorship, insights,
+    } = body;
 
     if (!year || !month) {
       return NextResponse.json(
@@ -78,6 +82,10 @@ export async function PATCH(request: NextRequest) {
       naver,
       coupang,
       offline,
+      offlineVenueId,
+      addOfflineVenue,
+      removeOfflineVenueId,
+      sponsorship,
       insights,
     });
 
