@@ -220,7 +220,7 @@ describe("buildOverviewData", () => {
   test("sponsorship이 없는 레포트는 sponsorshipCost가 0이다", () => {
     const report = makeReport({ year: 2025, month: 10 });
     // sponsorship을 undefined로 설정 (옛날 데이터 시나리오)
-    (report as Record<string, unknown>).sponsorship = undefined;
+    (report as unknown as Record<string, unknown>).sponsorship = undefined;
     const result = buildOverviewData([report]);
     expect(result.months[0].sponsorshipCost).toBe(0);
   });

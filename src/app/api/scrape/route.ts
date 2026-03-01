@@ -10,27 +10,10 @@ import {
   calcOfflineVenueProfit,
 } from "@/lib/calculations/profit";
 import { rebuildDerivedFields } from "@/lib/calculations/ranking";
-import {
-  MonthlyReport,
-  OfflineData,
-  PlatformFees,
-  SponsorshipData,
-} from "@/lib/types";
+import { MonthlyReport, OfflineData, SponsorshipData } from "@/lib/types";
 import { OFFLINE_MATERIAL_RATE } from "@/lib/config";
-
-const EMPTY_FEES: PlatformFees = {
-  settlementAmount: 0,
-  logisticsFee: 0,
-  commissionFee: 0,
-  adFee: 0,
-};
-
-const DEFAULT_SPONSORSHIP: SponsorshipData = {
-  items: [],
-  marketingCost: 0,
-  totalQuantity: 0,
-  handmadeQuantity: 0,
-};
+import { EMPTY_FEES, DEFAULT_SPONSORSHIP } from "@/lib/constants";
+import { getErrorMessage } from "@/lib/utils/error";
 
 /**
  * POST /api/scrape
@@ -135,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(report);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "데이터 수집 실패";
+    const message = getErrorMessage(error, "데이터 수집 실패");
     console.error("[POST /api/scrape]", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }

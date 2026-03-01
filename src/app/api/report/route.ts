@@ -4,6 +4,7 @@ import {
   updateReport,
   listReports,
 } from "@/lib/storage/report-store";
+import { getErrorMessage } from "@/lib/utils/error";
 
 /**
  * GET /api/report
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(report);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "조회 실패";
+    const message = getErrorMessage(error, "조회 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -91,7 +92,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "수정 실패";
+    const message = getErrorMessage(error, "수정 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

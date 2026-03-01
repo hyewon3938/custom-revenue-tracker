@@ -5,6 +5,7 @@ import {
   renameVenue,
   deleteVenue,
 } from "@/lib/storage/venue-store";
+import { getErrorMessage } from "@/lib/utils/error";
 
 /** GET /api/venues — 입점처 레지스트리 반환 */
 export async function GET() {
@@ -12,7 +13,7 @@ export async function GET() {
     const registry = await loadVenues();
     return NextResponse.json(registry);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "조회 실패";
+    const message = getErrorMessage(error, "조회 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     const venue = await addVenue(name.trim());
     return NextResponse.json(venue, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "등록 실패";
+    const message = getErrorMessage(error, "등록 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -48,7 +49,7 @@ export async function PATCH(request: NextRequest) {
     const venue = await renameVenue(id, name.trim());
     return NextResponse.json(venue);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "수정 실패";
+    const message = getErrorMessage(error, "수정 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -66,7 +67,7 @@ export async function DELETE(request: NextRequest) {
     await deleteVenue(id);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "삭제 실패";
+    const message = getErrorMessage(error, "삭제 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

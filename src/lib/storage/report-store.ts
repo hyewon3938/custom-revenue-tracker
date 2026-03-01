@@ -21,6 +21,7 @@ import { loadProductMapping } from "@/lib/storage/mapping-store";
 import { deepMerge } from "@/lib/utils/deep-merge";
 import { pad, getPrevMonth } from "@/lib/utils/format";
 import { REVIEW_MARKETING_COST_PER_HANDMADE } from "@/lib/config";
+import { DEFAULT_SPONSORSHIP } from "@/lib/constants";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
 
@@ -177,12 +178,6 @@ export async function loadReport(
 
 // ─── updateReport 서브 함수 ────────────────────────────────────────────────
 
-const DEFAULT_SPONSORSHIP: SponsorshipData = {
-  items: [],
-  marketingCost: 0,
-  totalQuantity: 0,
-  handmadeQuantity: 0,
-};
 
 /** 오프라인 입점처 배열에 추가/삭제/수정 반영 */
 function applyOfflineUpdates(
