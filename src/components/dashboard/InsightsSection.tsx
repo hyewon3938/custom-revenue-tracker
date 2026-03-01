@@ -73,12 +73,29 @@ function renderBoldText(text: string) {
   );
 }
 
+/** ISO 타임스탬프 → "3월 1일 15:30 생성" */
+function formatGeneratedAt(iso: string): string {
+  const d = new Date(iso);
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const h = d.getHours();
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${m}월 ${day}일 ${h}:${min} 생성`;
+}
+
 interface Props {
   insights: SalesInsight[];
+  insightsGeneratedAt?: string;
+  lastModifiedAt?: string;
   onRegenerate: () => Promise<void>;
 }
 
-export default function InsightsSection({ insights, onRegenerate }: Props) {
+export default function InsightsSection({
+  insights,
+  insightsGeneratedAt,
+  lastModifiedAt,
+  onRegenerate,
+}: Props) {
   const [regenerating, setRegenerating] = useState(false);
 
   const handleRegenerate = async () => {
@@ -89,6 +106,13 @@ export default function InsightsSection({ insights, onRegenerate }: Props) {
       setRegenerating(false);
     }
   };
+
+  // 낡음 판단: 인사이트 생성 이후 데이터가 변경됐는지
+  const isStale =
+    insights.length > 0 &&
+    !!insightsGeneratedAt &&
+    !!lastModifiedAt &&
+    lastModifiedAt !== insightsGeneratedAt;
 
   // 타입별 그룹핑
   const grouped = TYPE_ORDER.map((type) => ({
@@ -101,18 +125,41 @@ export default function InsightsSection({ insights, onRegenerate }: Props) {
     <section>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-800">AI 인사이트</h3>
-        <button
-          onClick={handleRegenerate}
-          disabled={regenerating}
-          className="text-sm text-brand-500 hover:text-brand-700 disabled:opacity-40 transition-colors"
-        >
-          {regenerating
-            ? "생성 중..."
-            : insights.length === 0
-              ? "생성"
-              : "재생성"}
-        </button>
+        <div className="flex items-center gap-3">
+          {/* 생성 시각 (fresh 상태일 때만) */}
+          {insights.length > 0 && insightsGeneratedAt && !isStale && (
+            <span className="text-xs text-gray-400">
+              {formatGeneratedAt(insightsGeneratedAt)}
+            </span>
+          )}
+          <button
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand-500 text-white hover:bg-brand-600"
+          >
+            {regenerating
+              ? "생성 중..."
+              : insights.length === 0
+                ? "인사이트 생성"
+                : "재생성"}
+          </button>
+        </div>
       </div>
+
+      {/* 낡음 경고 배너 */}
+      {isStale && (
+        <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-700">
+            <span className="mr-1.5">&#9888;</span>
+            인사이트 생성 이후 데이터가 변경되었습니다.
+            {insightsGeneratedAt && (
+              <span className="text-amber-500 ml-1.5 text-xs">
+                ({formatGeneratedAt(insightsGeneratedAt)})
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       {insights.length === 0 ? (
         <Card className="py-12 text-center">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateSalesInsights } from "@/lib/ai/insights";
-import { loadReport, loadRecentHistory, updateReport } from "@/lib/storage/report-store";
+import { loadReport, loadRecentHistory, listReports, updateReport } from "@/lib/storage/report-store";
+import { buildOverviewData } from "@/lib/calculations/overview";
 import { ENABLE_AI_INSIGHTS } from "@/lib/config";
 
 /**
@@ -43,10 +44,21 @@ export async function POST(request: NextRequest) {
     // 최대 3개월 히스토리 로드 [전달, 전전달, 전전전달]
     const history = await loadRecentHistory(year, month, 3);
 
-    const insights = await generateSalesInsights(report, history);
+    // 전체 기간 개요 데이터 로드 (장기 추세 분석용)
+    const allList = await listReports();
+    const allReports = (
+      await Promise.all(allList.map(({ year: y, month: m }) => loadReport(y, m)))
+    ).filter((r): r is NonNullable<typeof r> => r !== null);
+    const { months: overview } = buildOverviewData(allReports);
+
+    const insights = await generateSalesInsights(report, history, overview);
     const updated = await updateReport(year, month, { insights });
 
-    return NextResponse.json({ insights: updated.insights });
+    return NextResponse.json({
+      insights: updated.insights,
+      insightsGeneratedAt: updated.insightsGeneratedAt,
+      lastModifiedAt: updated.lastModifiedAt,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "인사이트 생성 실패";
     console.error("[POST /api/insights] 인사이트 생성 실패");

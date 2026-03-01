@@ -125,6 +125,7 @@ export async function POST(request: NextRequest) {
       sponsorship,
       ...derived,
       insights: existing?.insights ?? [],
+      insightsGeneratedAt: existing?.insightsGeneratedAt,
       warnings: raw.warnings,
       collectedAt: timestamp,
       lastModifiedAt: timestamp,

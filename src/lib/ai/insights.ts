@@ -1,4 +1,4 @@
-import { MonthlyReport, SalesInsight } from "@/lib/types";
+import { MonthlyReport, MonthlyOverview, SalesInsight } from "@/lib/types";
 import { formatKRW } from "@/lib/utils/format";
 import { GROQ_API_KEY, AI_MODEL } from "@/lib/config";
 
@@ -63,7 +63,7 @@ function profitMargin(revenue: number, netProfit: number): string {
 
 /** 광고 효율 (ROAS = 매출 / 광고비) */
 function calcROAS(revenue: number, adFee: number): string {
-  if (adFee === 0) return "N/A (광고비 없음)";
+  if (adFee === 0) return "해당 없음 (광고 미집행)";
   return (revenue / adFee).toFixed(1);
 }
 
@@ -308,11 +308,73 @@ ${droppedFromTop.length > 0 ? `- TOP5 이탈: ${droppedFromTop.map((r) => `${r.p
   return `## 5. 월별 추이 및 전달 비교\n\n${trendTable}\n\n${detailComparison}`;
 }
 
+// ─── 전체 기간 개요 섹션 ──────────────────────────────────────────────
+
+function buildOverviewSection(
+  report: Report,
+  overview: MonthlyOverview[]
+): string {
+  // 당월 포함 최소 3개월 이상일 때만 의미 있음
+  if (overview.length < 3) return "";
+
+  const header = overview.map((m) => m.label).join(" | ");
+  const separator = overview.map(() => "---").join(" | ");
+
+  const row = (label: string, fn: (m: MonthlyOverview) => string) =>
+    `| ${label} | ${overview.map(fn).join(" | ")} |`;
+
+  const table = `| 지표 | ${header} |
+| --- | ${separator} |
+${row("매출", (m) => formatKRW(m.totalRevenue))}
+${row("순이익", (m) => formatKRW(m.totalNetProfit))}
+${row("마진율", (m) => `${m.marginRate}%`)}
+${row("판매량", (m) => `${m.totalQuantity}개`)}
+${row("끈갈피", (m) => `${m.handmadeQuantity}개`)}
+${row("네이버 매출", (m) => formatKRW(m.naverRevenue))}
+${row("쿠팡 매출", (m) => formatKRW(m.coupangRevenue))}
+${row("오프라인 매출", (m) => formatKRW(m.offlineRevenue))}
+${row("네이버 광고비", (m) => formatKRW(m.naverAdFee))}
+${row("쿠팡 광고비", (m) => formatKRW(m.coupangAdFee))}
+${row("협찬 비용", (m) => formatKRW(m.sponsorshipCost))}
+${row("마케팅 합계", (m) => formatKRW(m.naverAdFee + m.coupangAdFee + m.sponsorshipCost))}
+${row("광고비/매출 비율", (m) => {
+    const adTotal = m.naverAdFee + m.coupangAdFee;
+    return m.totalRevenue > 0 ? `${((adTotal / m.totalRevenue) * 100).toFixed(1)}%` : "0%";
+  })}`;
+
+  // 전체 누적 요약
+  const totals = overview.reduce(
+    (acc, m) => ({
+      revenue: acc.revenue + m.totalRevenue,
+      netProfit: acc.netProfit + m.totalNetProfit,
+      quantity: acc.quantity + m.totalQuantity,
+    }),
+    { revenue: 0, netProfit: 0, quantity: 0 }
+  );
+  const avgMargin =
+    totals.revenue > 0
+      ? Math.round((totals.netProfit / totals.revenue) * 1000) / 10
+      : 0;
+
+  return `## 6. 전체 기간 개요 (${overview.length}개월)
+
+${table}
+
+### 누적 요약
+- 누적 매출: ${formatKRW(totals.revenue)}
+- 누적 순이익: ${formatKRW(totals.netProfit)}
+- 평균 마진율: ${avgMargin}%
+- 누적 판매량: ${totals.quantity}개
+
+이 데이터를 바탕으로 장기적 매출 추세, 마진율 변화 패턴, 채널별 성장/하락 추이 등 전체 기간에서 주목할 점이 있다면 분석해주세요.`;
+}
+
 // ─── 프롬프트 통합 ─────────────────────────────────────────────────────
 
-function buildPrompt(
+export function buildPrompt(
   report: Report,
-  history?: (Report | null)[]
+  history?: (Report | null)[],
+  overview?: MonthlyOverview[]
 ): string {
   const sections = [
     buildPeriodSection(report),
@@ -321,6 +383,7 @@ function buildPrompt(
     buildProductSection(report),
     buildSponsorshipSection(report),
     history ? buildTrendSection(report, history) : "",
+    overview ? buildOverviewSection(report, overview) : "",
   ];
 
   return sections.filter(Boolean).join("\n\n");
@@ -342,19 +405,65 @@ const SYSTEM_PROMPT = `당신은 핸드메이드 끈갈피(비즈 책갈피) 판
 3. 우선순위 명시: 가장 효과가 클 것으로 보이는 액션을 먼저 제안
 4. 솔직한 평가: 좋은 점만이 아니라 문제점도 명확히 지적
 
+## 언어 규칙 (필수)
+- 반드시 순수 한글로만 작성하세요
+- 한자(漢字), 일본어(ひらがな/カタカナ) 절대 사용 금지
+- 예: "前月" → "지난달", "分析" → "분석", "增加" → "증가", "效果" → "효과"
+- 전문 용어도 한글로 풀어서 작성: "MoM" → "전달 대비", "YoY" → "전년 대비"
+
 ## 필수 분석 카테고리 (각 카테고리에서 최소 1개 인사이트)
 1. **revenue**: 전체 및 플랫폼별 매출 동향
 2. **profit**: 이익률 분석 (플랫폼별 이익률 차이, 비용 구조 문제점)
 3. **product**: 어떤 상품을 전략적으로 밀어야 할지 (TOP 상품, 성장 잠재력 있는 상품)
 4. **platform**: 플랫폼별 성과 비교 및 채널 전략
-5. **ad**: 광고 효율 분석 (ROAS가 낮으면 광고 중단/축소 권고)
+5. **ad**: 광고 효율 분석 (광고를 집행한 플랫폼만 분석)
 6. **sponsorship**: 협찬 마케팅 효과 분석 (데이터가 있는 경우에만)
 7. **trend**: 전달 대비 변화 트렌드 (이전 달 데이터가 있는 경우에만)
+8. **overview**: 전체 기간 누적 추이에서 주목할 만한 패턴 (전체 개요 데이터가 있는 경우에만)
 
-## 광고 효율 판단 기준
-- ROAS 3.0 미만: 광고 효율이 낮으므로 축소 또는 중단 권고
+## 광고 및 마케팅 비용 분석 규칙
+
+### 기본 원칙
+- 광고비가 0원인 플랫폼은 "해당 월에 광고를 집행하지 않은 것"으로 판단
+- "광고를 안 하고 있으니 해야 한다"처럼 단순 제안하지 말 것
+- 반드시 전체 기간 개요의 광고비·매출·마진율 추이를 함께 비교하여 근거 기반으로 판단할 것
+
+### 광고 미집행 시 판단 프로세스
+1. 전체 기간에서 광고를 했던 달과 안 했던 달의 매출 차이를 비교
+2. 광고를 했을 때 매출 증가폭 vs 광고비 지출을 비교하여 실제 이익 기여도를 계산
+3. 광고 집행 달의 마진율 변화를 확인 (매출이 늘어도 마진율이 크게 떨어지면 주의)
+4. 이 근거를 바탕으로 결론 도출:
+   - 광고 시 매출 증가가 유의미하고 마진율 유지 → 광고 재개 권고
+   - 광고 시 매출 증가가 미미하거나 마진율 하락 → 광고보다 다른 전략(상품 개선, 채널 확대 등) 제안
+   - 데이터 부족 → 소규모 테스트 광고 후 효과 측정 권고
+
+### 광고 집행 시 ROAS 기준
+- ROAS 3.0 미만: 효율이 낮으므로 키워드/타겟 재검토 또는 축소 권고
 - ROAS 3.0~5.0: 보통 수준, 키워드 최적화 권고
 - ROAS 5.0 이상: 양호, 예산 확대 검토 가능
+
+### 마케팅 비용 전체 판단
+- 광고비 + 협찬 비용 합계가 매출 대비 몇 %인지 확인
+- 마케팅 비용 대비 매출 증가 효율을 월별로 비교
+- 협찬과 광고 중 어떤 마케팅이 더 비용 효율적인지 비교 분석
+
+## 변화 원인 분석 (필수)
+매출, 판매량, 마진율이 증가하거나 감소했을 때 반드시 "왜 그런지"를 유추하세요.
+단순히 "감소했다"가 아니라 가능한 원인을 데이터와 맥락 기반으로 설명해야 합니다.
+
+### 확인할 원인 후보
+1. **광고비 변화**: 광고 중단/축소로 노출이 줄어 매출 감소, 또는 광고 시작으로 매출 증가
+2. **협찬 효과**: 협찬 리뷰 게시 후 1~2개월 뒤 판매 증가, 또는 협찬 미진행으로 노출 감소
+3. **달력 요인**: 2월은 28일(또는 29일)로 다른 달보다 2~3일 짧아 매출 감소 가능. 1월/5월/9월 등 연휴가 많은 달은 사람들이 외출/여행을 하면서 온라인 쇼핑이 줄어드는 경향이 있음
+4. **계절/시즌 요인**: 연말(11~12월) 선물 수요 증가, 연초(1~2월) 소비 심리 위축, 여름/겨울 방학 시즌 독서량 변화
+5. **플랫폼 비용 구조 변화**: 수수료율 변화, 물류비 변동 등이 마진율에 영향
+6. **상품 구성 변화**: 인기 상품의 판매 증감, 신상품 효과, 특정 상품 품절 등
+
+### 분석 방법
+- 전체 기간 개요 데이터에서 같은 달(전년 동월)이 있으면 계절적 패턴인지 비교
+- 광고비가 줄거나 0이 된 달과 매출 감소가 동시에 일어났는지 확인
+- 협찬을 진행한 다음 달에 해당 상품 판매가 늘었는지 확인
+- 여러 원인이 복합적으로 작용했을 가능성도 언급 (예: "2월은 일수가 적은 데다 광고도 미집행하여 복합적으로 영향")
 
 ## 협찬 마케팅 지연 효과
 - 협찬 리뷰의 판매 전환 효과는 1~2개월 뒤에 나타남
@@ -364,7 +473,7 @@ const SYSTEM_PROMPT = `당신은 핸드메이드 끈갈피(비즈 책갈피) 판
 
 ## 출력 형식
 반드시 아래 JSON 배열 형식으로만 출력하세요. 추가 설명 없이 JSON만 반환하세요.
-인사이트는 7~10개를 생성하세요.
+인사이트는 7~12개를 생성하세요. 전체 기간 개요 데이터가 있으면 장기 추세 인사이트도 포함하세요.
 
 description 안에서 핵심 수치, 상품명, 행동 권장 사항은 **볼드 마커**로 강조하세요.
 예시: "매출이 **153,000원에서 220,000원으로 43.8% 증가**했으며, **쿠팡 채널 집중 노출**을 권장합니다."
@@ -374,7 +483,7 @@ description 안에서 핵심 수치, 상품명, 행동 권장 사항은 **볼드
     "title": "인사이트 제목 (15자 이내, 핵심 키워드 포함)",
     "description": "구체적인 설명과 행동 권장 사항 (150자 이내, 수치 포함, **핵심 강조**)",
     "type": "positive | negative | neutral | action",
-    "category": "revenue | profit | product | platform | ad | sponsorship | trend"
+    "category": "revenue | profit | product | platform | ad | sponsorship | trend | overview"
   }
 ]
 
@@ -389,18 +498,20 @@ type 분류:
 /**
  * Groq API (Llama 3.3)를 사용해 월간 판매 인사이트 생성.
  * history: [전달, 전전달, 전전전달] 순. 없으면 당월 데이터만으로 분석.
+ * overview: 전체 기간 월별 개요 데이터 (장기 추세 분석용).
  */
 export async function generateSalesInsights(
   report: Report,
-  history?: (Report | null)[]
+  history?: (Report | null)[],
+  overview?: MonthlyOverview[]
 ): Promise<SalesInsight[]> {
-  const prompt = buildPrompt(report, history);
+  const prompt = buildPrompt(report, history, overview);
 
   const text = await callGroq([
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
-      content: `다음 판매 데이터를 분석하여 핵심 인사이트 7~10개를 JSON 배열로 제공해주세요.\n\n${prompt}`,
+      content: `다음 판매 데이터를 분석하여 핵심 인사이트 7~12개를 JSON 배열로 제공해주세요.\n\n${prompt}`,
     },
   ]);
 
