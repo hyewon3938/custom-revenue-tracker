@@ -31,7 +31,7 @@ export const OFFLINE_MATERIAL_RATE = requireRate("OFFLINE_MATERIAL_RATE");
 export const NAVER_SHIPPING_FEE = envInt("NAVER_SHIPPING_FEE", 3000);
 
 /** 네이버 판매자 실배송비 (택배사 비용) */
-export const NAVER_SHIPPING_COST = envInt("NAVER_SHIPPING_COST", 3200);
+export const NAVER_SHIPPING_COST = envInt("NAVER_SHIPPING_COST", 3300);
 
 /** 쿠팡 배송 마크업 (단가 상승분) */
 export const COUPANG_SHIPPING_MARKUP = envInt("COUPANG_SHIPPING_MARKUP", 2000);
