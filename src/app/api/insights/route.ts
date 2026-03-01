@@ -3,6 +3,7 @@ import { generateSalesInsights } from "@/lib/ai/insights";
 import { loadReport, loadRecentHistory, listReports, updateReport } from "@/lib/storage/report-store";
 import { buildOverviewData } from "@/lib/calculations/overview";
 import { ENABLE_AI_INSIGHTS } from "@/lib/config";
+import { getErrorMessage } from "@/lib/utils/error";
 
 /**
  * POST /api/insights
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
       lastModifiedAt: updated.lastModifiedAt,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "인사이트 생성 실패";
+    const message = getErrorMessage(error, "인사이트 생성 실패");
     console.error("[POST /api/insights] 인사이트 생성 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listVersions, restoreVersion } from "@/lib/storage/report-store";
+import { getErrorMessage } from "@/lib/utils/error";
 
 /**
  * GET /api/report/versions?year=X&month=Y
@@ -31,8 +32,7 @@ export async function GET(request: NextRequest) {
     const versions = await listVersions(year, month);
     return NextResponse.json(versions);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "버전 목록 조회 실패";
+    const message = getErrorMessage(error, "버전 목록 조회 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -56,8 +56,7 @@ export async function POST(request: NextRequest) {
     const report = await restoreVersion(year, month, timestamp);
     return NextResponse.json(report);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "버전 복구 실패";
+    const message = getErrorMessage(error, "버전 복구 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

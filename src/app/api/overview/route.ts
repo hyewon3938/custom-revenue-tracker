@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listReports, loadReport } from "@/lib/storage/report-store";
 import { buildOverviewData } from "@/lib/calculations/overview";
+import { getErrorMessage } from "@/lib/utils/error";
 
 /**
  * GET /api/overview
@@ -23,7 +24,7 @@ export async function GET() {
 
     return NextResponse.json(buildOverviewData(reports));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "집계 실패";
+    const message = getErrorMessage(error, "집계 실패");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
