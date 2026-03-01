@@ -634,7 +634,7 @@ const CJK_REPLACE_MAP: [string, string][] = [
 const CJK_REGEX = /[\u3400-\u4DBF\u4E00-\u9FFF]/g;
 
 /** 한자→한글 치환 후 잔여 한자 제거 */
-function sanitizeText(value: string): string {
+export function sanitizeText(value: string): string {
   let result = value;
   for (const [cjk, korean] of CJK_REPLACE_MAP) {
     result = result.replaceAll(cjk, korean);
