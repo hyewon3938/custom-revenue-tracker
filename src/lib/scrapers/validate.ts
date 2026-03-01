@@ -50,7 +50,7 @@ export function validateCollectedData(
     !failedScrapers.has("naver-settlement")
   ) {
     warnings.push({
-      level: "warn",
+      level: "error",
       message:
         "네이버 매출이 있지만 정산/수수료 데이터가 0원입니다. 정산내역 수집이 실패했을 수 있습니다.",
     });
@@ -93,7 +93,7 @@ export function validateCollectedData(
     !failedScrapers.has("coupang-settlement")
   ) {
     warnings.push({
-      level: "warn",
+      level: "error",
       message:
         "쿠팡 매출이 있지만 수수료/물류비/광고비가 모두 0원입니다. 정산 비용 파싱이 실패했을 수 있습니다.",
     });

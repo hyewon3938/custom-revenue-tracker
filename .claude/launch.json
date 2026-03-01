@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "yarn",
+      "runtimeExecutable": "node_modules/.bin/next",
       "runtimeArgs": ["dev"],
       "port": 3000
     }

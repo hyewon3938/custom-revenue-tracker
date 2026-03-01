@@ -43,22 +43,29 @@ async function extractSettlementRows(
 /**
  * 검색 결과가 조회 월 데이터로 갱신될 때까지 대기.
  * 첫 번째 데이터 행의 날짜 텍스트가 year.month 접두사와 일치하는지 확인.
- * 데이터가 없는 달은 행이 0개 → 로드 완료로 간주.
+ * 빈 테이블(데이터 없음 메시지 포함)은 해당 월 데이터 없음으로 간주.
  */
 async function waitForMonthDataLoaded(
   frame: Frame,
   year: number,
   month: number
 ): Promise<void> {
-  const p1 = `${year}.${pad(month)}`; // "2026.01"
-  const p2 = `${year}-${pad(month)}`; // "2026-01"
+  const p1 = `${year}.${pad(month)}`; // "2026.02"
+  const p2 = `${year}-${pad(month)}`; // "2026-02"
   await frame.waitForFunction(
     ({ p1, p2 }: { p1: string; p2: string }) => {
       const tables = document.querySelectorAll("table.tui-grid-table");
       const last = tables[tables.length - 1];
       if (!last) return false;
       const rows = Array.from(last.querySelectorAll("tbody tr"));
-      if (rows.length === 0) return true;
+      // 빈 테이블: "데이터가 없습니다" 또는 빈 상태 레이어가 보이면 로드 완료로 간주
+      if (rows.length === 0) {
+        // TOAST UI Grid는 데이터 없을 때 다양한 방법으로 표시:
+        // .tui-grid-layer-state, .tui-grid-cell-content "데이터가 없습니다" 등
+        const gridEl = last.closest(".tui-grid-container") ?? document;
+        const allText = gridEl.textContent ?? "";
+        return allText.includes("데이터가 없습니다") || allText.includes("조회된");
+      }
       for (const row of rows) {
         const text = row.querySelector("td")?.textContent?.trim() ?? "";
         if (/^\d{4}/.test(text)) return text.startsWith(p1) || text.startsWith(p2);
@@ -118,6 +125,25 @@ export async function scrapeNaverSettlement(
   // readonly 인풋 클릭 → 캘린더 선택 방식
   await setDateRangeWithCalendar(frame, year, month);
   await waitForMonthDataLoaded(frame, year, month);
+
+  // 데이터가 실제로 대상 월인지 사후 검증 (첫 행 날짜 확인)
+  const expectedMonth = `${year}.${pad(month)}`;
+  const firstRowDate = await frame.evaluate(({ expected }: { expected: string }) => {
+    const tables = document.querySelectorAll("table.tui-grid-table");
+    const last = tables[tables.length - 1];
+    if (!last) return null;
+    for (const row of last.querySelectorAll("tbody tr")) {
+      const text = row.querySelector("td")?.textContent?.trim() ?? "";
+      if (/^\d{4}/.test(text)) return text;
+    }
+    return null; // 행이 없음 = 해당 월 데이터 없음 (정상)
+  }, { expected: expectedMonth });
+
+  if (firstRowDate && !firstRowDate.startsWith(expectedMonth) && !firstRowDate.startsWith(`${year}-${pad(month)}`)) {
+    throw new Error(
+      `정산 데이터 월 불일치: 기대 ${expectedMonth}, 실제 첫 행 "${firstRowDate}"`
+    );
+  }
 
   let totalSettlement = 0;
   let totalCommission = 0;

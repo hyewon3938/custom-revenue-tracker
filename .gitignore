@@ -45,6 +45,9 @@ next-env.d.ts
 # 데이터 폴더 전체 (Google Drive 심볼릭 링크 — git에서 완전 제외)
 /data
 
+# 대화 로그 추출본 (개인 데이터)
+/scripts/chat-summary.md
+
 # 테스트 스크린샷
 /scripts/*.png
 
