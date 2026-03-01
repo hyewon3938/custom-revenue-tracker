@@ -176,6 +176,10 @@ export interface MonthlyOverview {
   naverRevenue: number;
   coupangRevenue: number;
   offlineRevenue: number;
+  // 마케팅 비용
+  naverAdFee: number;
+  coupangAdFee: number;
+  sponsorshipCost: number;    // 협찬 마케팅 비용 (부자재비)
 }
 
 /** GET /api/overview 응답 타입 */
@@ -219,6 +223,7 @@ export interface MonthlyReport {
   sponsorExcludedRanking: ProductRankEntry[]; // 협찬 제외 TOP5
   productMatrix: ProductMatrixRow[]; // 상품 × 플랫폼 표
   insights: SalesInsight[];
+  insightsGeneratedAt?: string; // ISO 8601 — 인사이트가 마지막으로 생성된 시각
   warnings: ScrapeWarning[];  // 수집 시 경고
   collectedAt: string; // ISO 8601
   lastModifiedAt: string; // ISO 8601

@@ -343,13 +343,17 @@ export async function updateReport(
     platforms.naver, platforms.coupang, platforms.offline, sponsorship, mapping
   );
 
+  const now = new Date().toISOString();
   const updated: MonthlyReport = {
     ...existing,
     ...platforms,
     sponsorship,
     ...derived,
     insights: updates.insights ?? existing.insights,
-    lastModifiedAt: new Date().toISOString(),
+    insightsGeneratedAt: updates.insights
+      ? now
+      : existing.insightsGeneratedAt,
+    lastModifiedAt: now,
   };
 
   await saveReport(updated);

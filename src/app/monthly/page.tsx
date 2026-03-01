@@ -130,8 +130,10 @@ export default function MonthlyPage() {
         const data = await res.json();
         throw new Error(data.error ?? "인사이트 생성 실패");
       }
-      const { insights } = await res.json();
-      setReport((prev) => (prev ? { ...prev, insights } : prev));
+      const { insights, insightsGeneratedAt, lastModifiedAt } = await res.json();
+      setReport((prev) =>
+        prev ? { ...prev, insights, insightsGeneratedAt, lastModifiedAt } : prev
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "인사이트 생성 중 오류가 발생했습니다.");
     }
@@ -287,6 +289,8 @@ export default function MonthlyPage() {
 
           <InsightsSection
             insights={report.insights}
+            insightsGeneratedAt={report.insightsGeneratedAt}
+            lastModifiedAt={report.lastModifiedAt}
             onRegenerate={handleRegenerate}
           />
         </>

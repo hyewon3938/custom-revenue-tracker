@@ -28,6 +28,10 @@ export function buildOverviewData(reports: MonthlyReport[]): OverviewResponse {
         (s: number, v: { revenue: number }) => s + v.revenue,
         0
       ),
+      // 마케팅 비용
+      naverAdFee: r.naver.fees.adFee,
+      coupangAdFee: r.coupang.fees.adFee,
+      sponsorshipCost: r.sponsorship?.marketingCost ?? 0,
     }))
     .sort((a, b) =>
       a.period.year !== b.period.year

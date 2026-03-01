@@ -28,6 +28,10 @@ const CHARTS: { title: string; Component: ComponentType<ChartProps> }[] = [
     title: "월별 마진율",
     Component: dynamic(() => import("./MarginChart"), { ssr: false, loading }),
   },
+  {
+    title: "월별 마케팅 비용",
+    Component: dynamic(() => import("./MarketingCostChart"), { ssr: false, loading }),
+  },
 ];
 
 export default function ChartsSection({ data }: ChartProps) {
