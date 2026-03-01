@@ -471,9 +471,28 @@ const SYSTEM_PROMPT = `당신은 핸드메이드 끈갈피(비즈 책갈피) 판
 - 판매량이 증가했으면 협찬 효과가 있었다고 판단, 변화 없거나 감소했으면 추가 마케팅 필요 여부 판단
 - 2개월 이상의 추이 데이터가 있으면: 협찬 시작 전후의 장기적 판매 추이 변화도 분석
 
+## 전략적 인사이트 (중요)
+단순 수치 나열이 아니라, 데이터에서 사업 전략을 유추하는 인사이트를 반드시 포함하세요.
+
+좋은 예:
+- 계절별 매출 패턴에서 시즌 상품 개발 기회 발견
+- 특정 상품의 플랫폼 간 판매 편차에서 교차 마케팅 기회 포착
+- 마진율 추이에서 가격 정책 조정 타이밍 제안
+- 오프라인 입점 확대 시기나 신규 채널 진출 전략
+
+나쁜 예 (금지):
+- "~를 고려해볼 필요가 있다" 같은 애매한 결론
+- 데이터에서 바로 읽히는 수치를 그대로 반복 (예: "매출이 X원이다")
+- 근거 없는 일반론 (예: "마케팅을 강화해야 합니다")
+
 ## 출력 형식
 반드시 아래 JSON 배열 형식으로만 출력하세요. 추가 설명 없이 JSON만 반환하세요.
 인사이트는 7~12개를 생성하세요. 전체 기간 개요 데이터가 있으면 장기 추세 인사이트도 포함하세요.
+
+### type별 최소 개수 (필수)
+- **action**: 최소 2개 (구체적이고 즉시 실행 가능한 액션)
+- **positive 또는 negative**: 합쳐서 최소 3개
+- 나머지는 데이터에 맞게 자유 배분
 
 description 안에서 핵심 수치, 상품명, 행동 권장 사항은 **볼드 마커**로 강조하세요.
 예시: "매출이 **153,000원에서 220,000원으로 43.8% 증가**했으며, **쿠팡 채널 집중 노출**을 권장합니다."
@@ -493,12 +512,81 @@ type 분류:
 - neutral: 중립적 관찰이나 참고 정보
 - action: 즉시 실행 가능한 구체적 액션 아이템`;
 
+// ─── 타입 분포 검증 ───────────────────────────────────────────────────
+
+/** type별 최소 요구 개수 */
+const ACTION_MIN = 2;
+const POS_NEG_MIN = 3;
+
+interface TypeDeficit {
+  action: number; // 부족한 action 개수
+  posNeg: number; // 부족한 positive+negative 개수
+}
+
+/** 인사이트 배열의 타입 분포를 검증하여 부족분을 반환 */
+function findTypeDeficit(insights: SalesInsight[]): TypeDeficit {
+  const actionCount = insights.filter((i) => i.type === "action").length;
+  const posNegCount = insights.filter(
+    (i) => i.type === "positive" || i.type === "negative"
+  ).length;
+
+  return {
+    action: Math.max(0, ACTION_MIN - actionCount),
+    posNeg: Math.max(0, POS_NEG_MIN - posNegCount),
+  };
+}
+
+/** 부족한 타입만 보충 요청하는 프롬프트 생성 */
+function buildSupplementPrompt(
+  existing: SalesInsight[],
+  deficit: TypeDeficit
+): string {
+  const existingList = existing
+    .map((i) => `- [${i.type}] ${i.title}`)
+    .join("\n");
+
+  const requests: string[] = [];
+  if (deficit.action > 0) {
+    requests.push(
+      `- **action** 타입 ${deficit.action}개 (구체적이고 즉시 실행 가능한 액션)`
+    );
+  }
+  if (deficit.posNeg > 0) {
+    requests.push(
+      `- **positive 또는 negative** 타입 ${deficit.posNeg}개`
+    );
+  }
+
+  return `기존에 생성된 인사이트:
+${existingList}
+
+위 인사이트에서 아래 타입이 부족합니다. **기존 인사이트와 중복되지 않는 새로운 관점**으로 추가 생성해주세요:
+
+${requests.join("\n")}
+
+동일한 JSON 배열 형식으로 추가할 인사이트만 반환하세요.`;
+}
+
+/** JSON 배열 응답에서 SalesInsight[] 파싱 (실패 시 null) */
+function parseInsightsJson(text: string): SalesInsight[] | null {
+  const match = text.trim().match(/\[[\s\S]*\]/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]) as SalesInsight[];
+  } catch {
+    return null;
+  }
+}
+
 // ─── 메인 함수 ─────────────────────────────────────────────────────────
 
 /**
  * Groq API (Llama 3.3)를 사용해 월간 판매 인사이트 생성.
  * history: [전달, 전전달, 전전전달] 순. 없으면 당월 데이터만으로 분석.
  * overview: 전체 기간 월별 개요 데이터 (장기 추세 분석용).
+ *
+ * 1차 생성 후 타입 분포를 검증하여, 부족한 타입이 있으면
+ * 보충 요청(2차 호출)으로 기존 인사이트를 보존하면서 누락 타입만 추가.
  */
 export async function generateSalesInsights(
   report: Report,
@@ -507,18 +595,40 @@ export async function generateSalesInsights(
 ): Promise<SalesInsight[]> {
   const prompt = buildPrompt(report, history, overview);
 
-  const text = await callGroq([
-    { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: `다음 판매 데이터를 분석하여 핵심 인사이트 7~12개를 JSON 배열로 제공해주세요.\n\n${prompt}`,
-    },
-  ]);
+  const systemMessage: GroqMessage = {
+    role: "system",
+    content: SYSTEM_PROMPT,
+  };
+  const dataMessage: GroqMessage = {
+    role: "user",
+    content: `다음 판매 데이터를 분석하여 핵심 인사이트 7~12개를 JSON 배열로 제공해주세요.\n\n${prompt}`,
+  };
 
-  const jsonMatch = text.trim().match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
+  // ── 1차: 메인 인사이트 생성 ──
+  const text = await callGroq([systemMessage, dataMessage]);
+
+  const insights = parseInsightsJson(text);
+  if (!insights) {
     throw new Error("인사이트 JSON 파싱 실패");
   }
 
-  return JSON.parse(jsonMatch[0]) as SalesInsight[];
+  // ── 2차: 타입 분포 검증 → 부족하면 보충 ──
+  const deficit = findTypeDeficit(insights);
+  if (deficit.action === 0 && deficit.posNeg === 0) {
+    return insights; // 모든 타입 충족 → 바로 반환
+  }
+
+  const supplementText = await callGroq([
+    systemMessage,
+    dataMessage,
+    { role: "assistant", content: JSON.stringify(insights) },
+    { role: "user", content: buildSupplementPrompt(insights, deficit) },
+  ]);
+
+  const supplement = parseInsightsJson(supplementText);
+  if (!supplement) {
+    return insights; // 보충 파싱 실패 → 원본 반환
+  }
+
+  return [...insights, ...supplement];
 }
