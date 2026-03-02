@@ -13,7 +13,13 @@ import {
 } from "recharts";
 import { MonthlyOverview } from "@/lib/types";
 import { formatKRW } from "@/lib/utils/format";
-import { CHART_MARGIN, GRID_PROPS, X_TICK, Y_TICK, LABEL_STYLE } from "./chart-config";
+import {
+  CHART_MARGIN,
+  GRID_PROPS,
+  X_TICK,
+  Y_TICK,
+  LABEL_STYLE,
+} from "./chart-config";
 
 interface Props {
   data: MonthlyOverview[];
@@ -49,21 +55,21 @@ export default function MarketingCostChart({ data }: Props) {
           dataKey="naverAdFee"
           name="네이버 광고비"
           stackId="marketing"
-          fill="#637AB9"
+          fill="#2938E4"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="coupangAdFee"
           name="쿠팡 광고비"
           stackId="marketing"
-          fill="#4FB7B3"
+          fill="#848EF0"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="sponsorshipCost"
           name="협찬 마케팅"
           stackId="marketing"
-          fill="#A8FBD3"
+          fill="#CDD1F9"
           radius={[4, 4, 0, 0]}
         >
           <LabelList

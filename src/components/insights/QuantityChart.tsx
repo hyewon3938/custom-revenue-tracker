@@ -12,7 +12,13 @@ import {
   LabelList,
 } from "recharts";
 import { MonthlyOverview } from "@/lib/types";
-import { CHART_MARGIN, GRID_PROPS, X_TICK, Y_TICK, LABEL_STYLE } from "./chart-config";
+import {
+  CHART_MARGIN,
+  GRID_PROPS,
+  X_TICK,
+  Y_TICK,
+  LABEL_STYLE,
+} from "./chart-config";
 
 interface Props {
   data: MonthlyOverview[];
@@ -24,25 +30,23 @@ export default function QuantityChart({ data }: Props) {
       <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid {...GRID_PROPS} />
         <XAxis dataKey="label" tick={X_TICK} />
-        <YAxis
-          tickFormatter={(v) => `${v}개`}
-          tick={Y_TICK}
-          width={44}
+        <YAxis tickFormatter={(v) => `${v}개`} tick={Y_TICK} width={44} />
+        <Tooltip
+          formatter={(value: number | undefined) => [`${value ?? 0}개`]}
         />
-        <Tooltip formatter={(value: number | undefined) => [`${value ?? 0}개`]} />
         <Legend />
         <Bar
           dataKey="handmadeQuantity"
           name="끈갈피"
           stackId="qty"
-          fill="#60B5FF"
+          fill="#5CC6A5"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="otherQuantity"
           name="기타"
           stackId="qty"
-          fill="#AFDDFF"
+          fill="#A7DAD8"
           radius={[4, 4, 0, 0]}
         >
           {/* 스택 합계(총 판매량)를 막대 위에 표시 */}
