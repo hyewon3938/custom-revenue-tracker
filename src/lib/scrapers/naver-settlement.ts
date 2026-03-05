@@ -11,8 +11,8 @@ export interface NaverSettlementResult {
 
 /**
  * 현재 페이지의 정산 테이블에서 합계를 추출.
- * 마지막 tui-grid-table > tbody tr 순회.
- * td[2] = 정산금액, td[6] = 수수료합계
+ * 마지막 tui-grid-table 헤더를 읽어 "정산금액" / "수수료합계" 컬럼 인덱스를 동적으로 결정.
+ * 고정 인덱스(td[2], td[6])는 네이버 컬럼 순서 변경 시 깨지므로 헤더 기반으로 교체.
  */
 async function extractSettlementRows(
   frame: Frame
@@ -24,17 +24,31 @@ async function extractSettlementRows(
     const table = tables[tables.length - 1];
     if (!table) return { settlementAmount: 0, commissionFee: 0 };
 
+    // 헤더 컬럼 인덱스를 동적으로 파악
+    // TOAST UI Grid는 thead가 별도 table일 수 있으므로 컨테이너 내 첫 번째 table에서 헤더를 읽음
+    const container = table.closest(".tui-grid-container");
+    const headerCells = Array.from(
+      (container ?? document).querySelectorAll("table.tui-grid-table thead th")
+    );
+    let settlementIdx = 2; // fallback
+    let commissionIdx = 6; // fallback
+    headerCells.forEach((th, i) => {
+      const text = th.textContent?.trim() ?? "";
+      if (text.includes("정산금액")) settlementIdx = i;
+      if (text.includes("수수료합계") || text.includes("수수료 합계")) commissionIdx = i;
+    });
+
     let settlementTotal = 0;
     let commissionTotal = 0;
     for (const row of table.querySelectorAll("tbody tr")) {
       const cells = Array.from(row.querySelectorAll("td"));
-      if (cells.length < 7) continue;
+      if (cells.length < 3) continue;
       const firstCell = cells[0]?.textContent?.trim() ?? "";
       if (!/^\d{4}/.test(firstCell)) continue;
       settlementTotal +=
-        parseInt((cells[2]?.textContent ?? "").replace(/[^\d-]/g, "")) || 0;
+        parseInt((cells[settlementIdx]?.textContent ?? "").replace(/[^\d-]/g, "")) || 0;
       commissionTotal +=
-        parseInt((cells[6]?.textContent ?? "").replace(/[^\d-]/g, "")) || 0;
+        parseInt((cells[commissionIdx]?.textContent ?? "").replace(/[^\d-]/g, "")) || 0;
     }
     return { settlementAmount: settlementTotal, commissionFee: commissionTotal };
   });
@@ -60,11 +74,13 @@ async function waitForMonthDataLoaded(
       const rows = Array.from(last.querySelectorAll("tbody tr"));
       // 빈 테이블: "데이터가 없습니다" 또는 빈 상태 레이어가 보이면 로드 완료로 간주
       if (rows.length === 0) {
-        // TOAST UI Grid는 데이터 없을 때 다양한 방법으로 표시:
-        // .tui-grid-layer-state, .tui-grid-cell-content "데이터가 없습니다" 등
+        // TOAST UI Grid 빈 상태: "데이터가 없습니다" 메시지 또는 빈 상태 레이어만 확인.
+        // "조회된" 같은 광범위한 텍스트는 로딩 중에도 나타날 수 있어 false positive 유발 → 제거.
         const gridEl = last.closest(".tui-grid-container") ?? document;
-        const allText = gridEl.textContent ?? "";
-        return allText.includes("데이터가 없습니다") || allText.includes("조회된");
+        return (
+          !!gridEl.querySelector(".tui-grid-layer-state") ||
+          (gridEl.textContent ?? "").includes("데이터가 없습니다")
+        );
       }
       for (const row of rows) {
         const text = row.querySelector("td")?.textContent?.trim() ?? "";
@@ -124,6 +140,11 @@ export async function scrapeNaverSettlement(
 
   // readonly 인풋 클릭 → 캘린더 선택 방식
   await setDateRangeWithCalendar(frame, year, month);
+
+  // 검색 버튼 클릭 후 TOAST UI Grid가 렌더링 완료될 때까지 짧게 대기.
+  // networkidle 이후에도 JS 기반 그리드는 비동기로 데이터를 렌더링할 수 있음.
+  await frame.waitForTimeout(800);
+
   await waitForMonthDataLoaded(frame, year, month);
 
   // 데이터가 실제로 대상 월인지 사후 검증 (첫 행 날짜 확인)
