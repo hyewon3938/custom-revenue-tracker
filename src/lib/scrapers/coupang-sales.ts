@@ -2,7 +2,7 @@ import { Page } from "playwright";
 import { ProductSales } from "@/lib/types";
 import { COUPANG_URLS, pad } from "./coupang-auth";
 import { detectCategory } from "@/lib/calculations/product";
-import { calcEndDay } from "./naver-datepicker";
+import { calcEndDay } from "@/lib/utils/format";
 
 export interface CoupangSalesResult {
   totalRevenue: number;

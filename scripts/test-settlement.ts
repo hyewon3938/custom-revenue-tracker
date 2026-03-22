@@ -48,18 +48,26 @@ async function main() {
 
   try {
     if (platform === "naver") {
-      const { scrapeNaverSettlement } = await import("../src/lib/scrapers/naver-settlement");
-      const { loginNaver } = await import("../src/lib/scrapers/naver-auth");
+      const { getSettlements } = await import("../src/lib/naver-api/settlement");
+      const { pad } = await import("../src/lib/utils/format");
 
-      console.log("1. 네이버 로그인...");
-      await loginNaver(page, context);
-      console.log("✅ 로그인 완료\n");
+      const startDate = `${year}-${pad(month)}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${pad(month)}-${pad(lastDay)}`;
 
-      console.log("2. 정산내역 스크레이핑...");
-      const result = await scrapeNaverSettlement(page, year, month);
-      console.log("✅ 결과:");
-      console.log(`   정산금액: ${result.settlementAmount.toLocaleString()}원`);
-      console.log(`   수수료: ${result.commissionFee.toLocaleString()}원`);
+      console.log(`1. 네이버 정산 API 호출 (${startDate} ~ ${endDate})...`);
+      const settlements = await getSettlements(startDate, endDate);
+      const settleAmount = settlements.reduce((s, e) => s + e.settleAmount, 0);
+      const commissionFee = Math.abs(settlements.reduce((s, e) => s + e.commissionSettleAmount, 0));
+      console.log("결과:");
+      console.log(`   정산금액: ${settleAmount.toLocaleString()}원`);
+      console.log(`   수수료: ${commissionFee.toLocaleString()}원`);
+      console.log(`   일별 내역: ${settlements.length}건`);
+
+      // API 모드에서는 브라우저 불필요 → 바로 종료
+      await context.close();
+      await browser.close();
+      return;
     } else {
       const { scrapeCoupangSettlement } = await import("../src/lib/scrapers/coupang-settlement");
       const { loginCoupang } = await import("../src/lib/scrapers/coupang-auth");
