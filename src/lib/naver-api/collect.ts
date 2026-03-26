@@ -47,13 +47,14 @@ export async function collectNaverDataViaApi(
   // 제품별 판매수량 집계
   const productMap = new Map<string, ProductSales>();
   for (const order of validOrders) {
-    const existing = productMap.get(order.productName);
+    const key = resolveProductKey(order.productName, order.productOption);
+    const existing = productMap.get(key);
     if (existing) {
       existing.quantity += order.quantity;
     } else {
-      productMap.set(order.productName, {
-        productName: order.productName,
-        category: detectCategory(order.productName),
+      productMap.set(key, {
+        productName: key,
+        category: detectCategory(key),
         platform: "naver",
         quantity: order.quantity,
       });
@@ -113,4 +114,19 @@ export async function collectNaverDataViaApi(
     },
     warnings,
   };
+}
+
+// ─── 옵션별 분리 ────────────────────────────────────────────────────────
+
+/** 비즈 식물 상품은 옵션별로 분리 집계, 나머지는 상품명 그대로 */
+function resolveProductKey(
+  productName: string,
+  productOption?: string
+): string {
+  if (!productOption) return productName;
+  if (productName.includes("비즈 식물") || productName.includes("비즈식물")) {
+    const option = productOption.trim();
+    return option ? `${productName} - ${option}` : productName;
+  }
+  return productName;
 }
