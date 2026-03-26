@@ -21,6 +21,10 @@ const CHARTS: { title: string; Component: ComponentType<ChartProps> }[] = [
     Component: dynamic(() => import("./RevenueChart"), { ssr: false, loading }),
   },
   {
+    title: "월별 순수익",
+    Component: dynamic(() => import("./NetProfitChart"), { ssr: false, loading }),
+  },
+  {
     title: "월별 판매량",
     Component: dynamic(() => import("./QuantityChart"), { ssr: false, loading }),
   },
