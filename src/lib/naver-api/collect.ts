@@ -35,14 +35,16 @@ export async function collectNaverDataViaApi(
     (sum, o) => sum + o.totalPaymentAmount, 0
   );
 
-  // 배송비: 유효 주문의 deliveryFeeAmount 합산
-  const shippingCollected = validOrders.reduce(
-    (sum, o) => sum + o.deliveryFeeAmount, 0
-  );
-
-  // 결제자수: 고유 orderId 수
-  const uniqueOrderIds = new Set(validOrders.map((o) => o.orderId));
-  const payerCount = uniqueOrderIds.size;
+  // 배송비: 주문(orderId) 단위로 중복 제거 후 합산
+  // (한 주문에 상품 여러 개면 deliveryFeeAmount가 중복될 수 있음)
+  const orderShippingMap = new Map<string, number>();
+  for (const order of validOrders) {
+    const current = orderShippingMap.get(order.orderId) ?? 0;
+    orderShippingMap.set(order.orderId, Math.max(current, order.deliveryFeeAmount));
+  }
+  const shippingCollected = Array.from(orderShippingMap.values())
+    .reduce((sum, fee) => sum + fee, 0);
+  const payerCount = orderShippingMap.size;
 
   // 제품별 판매수량 집계
   const productMap = new Map<string, ProductSales>();
