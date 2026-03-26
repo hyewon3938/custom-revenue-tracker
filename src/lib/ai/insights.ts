@@ -216,7 +216,10 @@ function buildSponsorshipSection(report: Report): string {
   if (!sponsorship || sponsorship.items.length === 0) return "";
 
   const itemsStr = sponsorship.items
-    .map((i) => `${i.productName} ${i.quantity}개`)
+    .map((i) => {
+      const priceStr = i.unitPrice ? ` @${i.unitPrice.toLocaleString()}원` : "";
+      return `${i.productName} ${i.quantity}개${priceStr}`;
+    })
     .join(", ");
 
   return `## 4. 협찬 마케팅

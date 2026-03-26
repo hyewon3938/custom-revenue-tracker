@@ -20,7 +20,7 @@ import { rebuildDerivedFields } from "@/lib/calculations/ranking";
 import { loadProductMapping } from "@/lib/storage/mapping-store";
 import { deepMerge } from "@/lib/utils/deep-merge";
 import { pad, getPrevMonth } from "@/lib/utils/format";
-import { REVIEW_MARKETING_COST_PER_HANDMADE } from "@/lib/config";
+import { calcTotalSponsorshipCost } from "@/lib/calculations/sponsorship";
 import { DEFAULT_SPONSORSHIP } from "@/lib/constants";
 
 const DATA_DIR = path.join(process.cwd(), "data", "reports");
@@ -284,15 +284,19 @@ function mergeSponsorshipData(
   const base = existing ?? DEFAULT_SPONSORSHIP;
   const merged = patch ? deepMerge(base, patch) : base;
 
+  // items 변경 없으면 그대로 반환 (marketingCost 수기 수정 포함)
   if (patch?.items === undefined) return merged;
 
   const totalQuantity = merged.items.reduce((s, i) => s + i.quantity, 0);
   const handmadeQuantity = merged.items
     .filter((i) => i.category === "handmade")
     .reduce((s, i) => s + i.quantity, 0);
-  const costPerHandmade = REVIEW_MARKETING_COST_PER_HANDMADE;
 
-  return { ...merged, totalQuantity, handmadeQuantity, marketingCost: handmadeQuantity * costPerHandmade };
+  // 자동 계산 시도 — unitPrice가 모두 입력된 경우만 자동, 아니면 기존값 유지
+  const autoCost = calcTotalSponsorshipCost(merged.items);
+  const marketingCost = autoCost ?? merged.marketingCost;
+
+  return { ...merged, totalQuantity, handmadeQuantity, marketingCost };
 }
 
 // ─── updateReport ──────────────────────────────────────────────────────────
