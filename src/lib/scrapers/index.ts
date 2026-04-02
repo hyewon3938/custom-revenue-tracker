@@ -66,7 +66,7 @@ export function getDateRange(
 
   const lastDay = new Date(year, month, 0).getDate();
 
-  const endDay = isCurrentMonth ? today.getDate() - 1 : lastDay;
+  const endDay = isCurrentMonth ? Math.max(today.getDate() - 1, 1) : lastDay;
 
   return {
     start: `${year}-${pad(month)}-01`,
@@ -221,7 +221,7 @@ export async function collectMonthlyData(
       }
       // 쿠팡 실패
       if (w.message.includes("쿠팡 주문 API") || w.message.includes("쿠팡 판매분석")) {
-        failedScrapers.add("coupang-sales");
+        failedScrapers.add("coupang-orders");
       }
       if (w.message.includes("쿠팡 정산")) failedScrapers.add("coupang-settlement");
     }
