@@ -58,16 +58,18 @@ export function validateCollectedData(
 
   // ─── 쿠팡 ─────────────────────────────────────────────────────────
 
-  // 매출 있는데 상품 비어있음
+  // 정산 매출 있는데 주문 API에서 상품이 비어있음
+  // — 정산일과 결제일 기준이 달라서 발생하는 정상적 불일치일 수 있음
+  //   (예: 전월 결제 주문이 이번 달 정산에 포함)
   if (
     coupang.revenue > 0 &&
     coupang.products.length === 0 &&
-    !failedScrapers.has("coupang-sales")
+    !failedScrapers.has("coupang-orders")
   ) {
     warnings.push({
-      level: "error",
+      level: "warn",
       message:
-        "쿠팡 매출이 있지만 상품 목록을 가져오지 못했습니다. 판매분석 수집이 실패했을 수 있습니다.",
+        "쿠팡 정산 매출이 있지만 해당 기간 결제된 주문이 없습니다. 정산일과 결제일 차이로 인한 정상적 불일치일 수 있습니다.",
     });
   }
 

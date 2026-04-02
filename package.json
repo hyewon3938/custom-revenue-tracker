@@ -8,15 +8,13 @@
     "start": "next start",
     "lint": "next lint",
     "playwright:install": "playwright install chromium",
-    "scrape:naver": "npx tsx scripts/collect-naver.ts",
-    "scrape:coupang": "npx tsx scripts/collect-coupang.ts",
-    "mapping:generate": "npx tsx scripts/generate-mapping.ts",
-    "mapping:apply": "npx tsx scripts/apply-mapping.ts",
-    "test:naver": "npx tsx scripts/test-naver.ts",
+    "mapping:generate": "npx tsx --env-file=.env.local scripts/generate-mapping.ts",
+    "mapping:apply": "npx tsx --env-file=.env.local scripts/apply-mapping.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "next": "15.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -24,6 +22,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.50.1",
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

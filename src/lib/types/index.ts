@@ -120,6 +120,7 @@ export interface SponsoredItem {
   productName: string;       // canonical 상품명 (productMatrix 기준)
   category: ProductCategory;
   quantity: number;
+  unitPrice?: number;        // 협찬 단가 (원) — 있으면 marketingCost 자동 계산
 }
 
 /** 협찬 마케팅 전체 데이터 (수기 입력) */

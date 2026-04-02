@@ -11,7 +11,7 @@ import { OFFLINE_SIMILARITY_THRESHOLD } from "@/lib/config";
 /** 상품명으로 카테고리 자동 판별 (끈갈피 = handmade, 독서링 = other) */
 export function detectCategory(productName: string): ProductCategory {
   if (productName.includes("독서링")) return "other";
-  const handmadeKeywords = ["끈갈피", "북마크"];
+  const handmadeKeywords = ["끈갈피", "북마크", "짹갈피", "꽃갈피"];
   return handmadeKeywords.some((kw) => productName.includes(kw))
     ? "handmade"
     : "other";

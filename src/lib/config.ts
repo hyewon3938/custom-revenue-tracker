@@ -38,11 +38,16 @@ export const COUPANG_SHIPPING_MARKUP = envInt("COUPANG_SHIPPING_MARKUP", 2000);
 
 // ─── 협찬 마케팅 ────────────────────────────────────────────────────────
 
-/** 리뷰 마케팅 끈갈피 1개당 비용 */
-export const REVIEW_MARKETING_COST_PER_HANDMADE = envInt(
-  "REVIEW_MARKETING_COST_PER_HANDMADE",
-  0
+/** 마케팅 링크 총 수수료율 (주문관리 1.947% + 판매수수료 0.91%) */
+export const MARKETING_LINK_FEE_RATE = parseFloat(
+  process.env.MARKETING_LINK_FEE_RATE ?? "0.02857"
 );
+
+/** 협찬 고객 배송비 (스토어 설정 기준) */
+export const SPONSOR_SHIPPING_FEE = envInt("SPONSOR_SHIPPING_FEE", 3000);
+
+/** 협찬 실배송비 (택배사 비용) */
+export const SPONSOR_SHIPPING_COST = envInt("SPONSOR_SHIPPING_COST", 3300);
 
 // ─── 세션 ───────────────────────────────────────────────────────────────
 
