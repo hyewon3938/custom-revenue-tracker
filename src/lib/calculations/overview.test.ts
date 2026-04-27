@@ -36,12 +36,21 @@ function makeReport(overrides: {
     marketingCost = 0,
   } = overrides;
 
-  const emptyFees = { commissionFee: 0, logisticsFee: 0, adFee: 0, settlementAmount: 0 };
+  const emptyFees = {
+    commissionFee: 0,
+    logisticsFee: 0,
+    inboundShippingFee: 0,
+    adFee: 0,
+    settlementAmount: 0,
+  };
   const emptyProfit = { profit: 0, materialCost: 0, netProfit: 0 };
 
   return {
     period: { year, month },
-    dataRange: { start: `${year}-${String(month).padStart(2, "0")}-01`, end: `${year}-${String(month).padStart(2, "0")}-28` },
+    dataRange: {
+      start: `${year}-${String(month).padStart(2, "0")}-01`,
+      end: `${year}-${String(month).padStart(2, "0")}-28`,
+    },
     naver: {
       revenue: naverRevenue,
       shippingCollected: 0,
@@ -74,11 +83,17 @@ function makeReport(overrides: {
       profit: emptyProfit,
       products: [],
     })),
-    sponsorship: { items: [], marketingCost, totalQuantity: 0, handmadeQuantity: 0 },
+    sponsorship: {
+      items: [],
+      marketingCost,
+      totalQuantity: 0,
+      handmadeQuantity: 0,
+    },
     summary: {
       totalRevenue,
       totalCommissionFee: 0,
       totalLogisticsFee: 0,
+      totalInboundShippingFee: 0,
       totalAdFee: 0,
       totalProfit: 0,
       totalMaterialCost: 0,

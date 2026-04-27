@@ -30,10 +30,14 @@ export function calcPlatformProfit(
   revenue: number,
   fees: PlatformFees,
   materialBase: number,
-  materialRate: number = ONLINE_MATERIAL_RATE
+  materialRate: number = ONLINE_MATERIAL_RATE,
 ): PlatformProfit {
   const profit =
-    revenue - fees.commissionFee - fees.logisticsFee - fees.adFee;
+    revenue -
+    fees.commissionFee -
+    fees.logisticsFee -
+    fees.inboundShippingFee -
+    fees.adFee;
   const materialCost = Math.round(materialBase * materialRate);
   const netProfit = profit - materialCost;
   return { profit, materialCost, netProfit };
@@ -49,10 +53,12 @@ export function calcPlatformProfit(
  */
 export function calcNaverShippingStats(
   shippingCollected: number,
-  payerCount: number
+  payerCount: number,
 ): ShippingStats {
   const regularCount =
-    NAVER_SHIPPING_FEE > 0 ? Math.round(shippingCollected / NAVER_SHIPPING_FEE) : 0;
+    NAVER_SHIPPING_FEE > 0
+      ? Math.round(shippingCollected / NAVER_SHIPPING_FEE)
+      : 0;
   const freeCount = Math.max(0, payerCount - regularCount);
   const sellerCost =
     freeCount * NAVER_SHIPPING_COST +
@@ -66,7 +72,7 @@ export function calcNaverShippingStats(
 /** 네이버: 순수 상품 매출 (고객 배송비 제외) */
 export function naverMaterialBase(
   revenue: number,
-  shippingCollected: number
+  shippingCollected: number,
 ): number {
   return revenue - shippingCollected;
 }
@@ -74,7 +80,7 @@ export function naverMaterialBase(
 /** 쿠팡: 배송 마크업 제외한 정가 기준 매출 */
 export function coupangMaterialBase(
   revenue: number,
-  totalQuantity: number
+  totalQuantity: number,
 ): number {
   return revenue - totalQuantity * COUPANG_SHIPPING_MARKUP;
 }
@@ -82,7 +88,7 @@ export function coupangMaterialBase(
 /** 고산의낮: 매출(할인가) + 할인분(수수료) = 정가 기준 */
 export function gosanMaterialBase(
   revenue: number,
-  commissionFee: number
+  commissionFee: number,
 ): number {
   return revenue + commissionFee;
 }
@@ -95,7 +101,12 @@ export function calcOfflineVenueProfit(venue: OfflineData): OfflineData {
       : venue.revenue;
   return {
     ...venue,
-    profit: calcPlatformProfit(venue.revenue, venue.fees, matBase, OFFLINE_MATERIAL_RATE),
+    profit: calcPlatformProfit(
+      venue.revenue,
+      venue.fees,
+      matBase,
+      OFFLINE_MATERIAL_RATE,
+    ),
   };
 }
 
@@ -105,30 +116,58 @@ export function calcOverallSummary(
   naver: NaverData,
   coupang: CoupangData,
   offlineVenues: OfflineData[],
-  marketingCost: number = 0
+  marketingCost: number = 0,
 ): OverallSummary {
   const offRevenue = offlineVenues.reduce((s, v) => s + v.revenue, 0);
-  const offCommission = offlineVenues.reduce((s, v) => s + v.fees.commissionFee, 0);
-  const offLogistics = offlineVenues.reduce((s, v) => s + v.fees.logisticsFee, 0);
+  const offCommission = offlineVenues.reduce(
+    (s, v) => s + v.fees.commissionFee,
+    0,
+  );
+  const offLogistics = offlineVenues.reduce(
+    (s, v) => s + v.fees.logisticsFee,
+    0,
+  );
+  const offInbound = offlineVenues.reduce(
+    (s, v) => s + v.fees.inboundShippingFee,
+    0,
+  );
   const offAd = offlineVenues.reduce((s, v) => s + v.fees.adFee, 0);
   const offProfit = offlineVenues.reduce((s, v) => s + v.profit.profit, 0);
-  const offMaterial = offlineVenues.reduce((s, v) => s + v.profit.materialCost, 0);
-  const offNetProfit = offlineVenues.reduce((s, v) => s + v.profit.netProfit, 0);
+  const offMaterial = offlineVenues.reduce(
+    (s, v) => s + v.profit.materialCost,
+    0,
+  );
+  const offNetProfit = offlineVenues.reduce(
+    (s, v) => s + v.profit.netProfit,
+    0,
+  );
   const offTotal = offlineVenues.reduce((s, v) => s + v.totalQuantity, 0);
   const offHandmade = offlineVenues.reduce((s, v) => s + v.handmadeQuantity, 0);
   const offOther = offlineVenues.reduce((s, v) => s + v.otherQuantity, 0);
 
   return {
     totalRevenue: naver.revenue + coupang.revenue + offRevenue,
-    totalCommissionFee: naver.fees.commissionFee + coupang.fees.commissionFee + offCommission,
-    totalLogisticsFee: naver.fees.logisticsFee + coupang.fees.logisticsFee + offLogistics,
+    totalCommissionFee:
+      naver.fees.commissionFee + coupang.fees.commissionFee + offCommission,
+    totalLogisticsFee:
+      naver.fees.logisticsFee + coupang.fees.logisticsFee + offLogistics,
+    totalInboundShippingFee:
+      naver.fees.inboundShippingFee +
+      coupang.fees.inboundShippingFee +
+      offInbound,
     totalAdFee: naver.fees.adFee + coupang.fees.adFee + offAd,
     totalProfit: naver.profit.profit + coupang.profit.profit + offProfit,
-    totalMaterialCost: naver.profit.materialCost + coupang.profit.materialCost + offMaterial,
+    totalMaterialCost:
+      naver.profit.materialCost + coupang.profit.materialCost + offMaterial,
     marketingCost,
-    totalNetProfit: naver.profit.netProfit + coupang.profit.netProfit + offNetProfit - marketingCost,
+    totalNetProfit:
+      naver.profit.netProfit +
+      coupang.profit.netProfit +
+      offNetProfit -
+      marketingCost,
     totalQuantity: naver.totalQuantity + coupang.totalQuantity + offTotal,
-    handmadeQuantity: naver.handmadeQuantity + coupang.handmadeQuantity + offHandmade,
+    handmadeQuantity:
+      naver.handmadeQuantity + coupang.handmadeQuantity + offHandmade,
     otherQuantity: naver.otherQuantity + coupang.otherQuantity + offOther,
   };
 }

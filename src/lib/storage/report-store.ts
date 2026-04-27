@@ -35,7 +35,13 @@ const writeLocks = new Map<string, Promise<void>>();
 function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const prev = writeLocks.get(key) ?? Promise.resolve();
   const next = prev.then(fn, fn);
-  writeLocks.set(key, next.then(() => {}, () => {}));
+  writeLocks.set(
+    key,
+    next.then(
+      () => {},
+      () => {},
+    ),
+  );
   return next;
 }
 
@@ -43,7 +49,11 @@ function getReportPath(year: number, month: number): string {
   return path.join(DATA_DIR, `${year}-${pad(month)}.json`);
 }
 
-function getVersionPath(year: number, month: number, timestamp: number): string {
+function getVersionPath(
+  year: number,
+  month: number,
+  timestamp: number,
+): string {
   return path.join(DATA_DIR, `${year}-${pad(month)}.v${timestamp}.json`);
 }
 
@@ -64,7 +74,10 @@ async function deleteOldVersions(year: number, month: number): Promise<void> {
 }
 
 /** 현재 레포트를 타임스탬프 백업 파일로 복사 */
-async function createBackup(year: number, month: number): Promise<number | null> {
+async function createBackup(
+  year: number,
+  month: number,
+): Promise<number | null> {
   const filePath = getReportPath(year, month);
   try {
     await fs.access(filePath);
@@ -82,7 +95,7 @@ async function createBackup(year: number, month: number): Promise<number | null>
 /** 특정 월의 백업 버전 목록 (최신순) */
 export async function listVersions(
   year: number,
-  month: number
+  month: number,
 ): Promise<{ timestamp: number; date: string; size: number }[]> {
   await ensureDataDir();
   const prefix = `${year}-${pad(month)}.v`;
@@ -95,7 +108,11 @@ export async function listVersions(
     if (!match) continue;
     const ts = parseInt(match[3]);
     const stat = await fs.stat(path.join(DATA_DIR, f));
-    versions.push({ timestamp: ts, date: new Date(ts).toISOString(), size: stat.size });
+    versions.push({
+      timestamp: ts,
+      date: new Date(ts).toISOString(),
+      size: stat.size,
+    });
   }
 
   return versions.sort((a, b) => b.timestamp - a.timestamp);
@@ -105,7 +122,7 @@ export async function listVersions(
 export async function restoreVersion(
   year: number,
   month: number,
-  timestamp: number
+  timestamp: number,
 ): Promise<MonthlyReport> {
   const filePath = getReportPath(year, month);
   const versionPath = getVersionPath(year, month, timestamp);
@@ -156,15 +173,29 @@ function migrateReport(raw: Record<string, unknown>): MonthlyReport {
     if (naver.shippingCollected === undefined) naver.shippingCollected = 0;
     if (naver.payerCount === undefined) naver.payerCount = 0;
   }
+  // PlatformFees에 inboundShippingFee 없는 기존 레포트 호환
+  ensureInboundShippingFee(raw.naver);
+  ensureInboundShippingFee(raw.coupang);
+  if (Array.isArray(raw.offline)) {
+    for (const venue of raw.offline) ensureInboundShippingFee(venue);
+  }
   // warnings 필드 없는 기존 레포트 호환
   if (!raw.warnings) raw.warnings = [];
   return raw as unknown as MonthlyReport;
 }
 
+function ensureInboundShippingFee(node: unknown): void {
+  if (!node || typeof node !== "object") return;
+  const fees = (node as { fees?: Record<string, unknown> }).fees;
+  if (fees && fees.inboundShippingFee === undefined) {
+    fees.inboundShippingFee = 0;
+  }
+}
+
 /** 레포트 로드. 없으면 null 반환 */
 export async function loadReport(
   year: number,
-  month: number
+  month: number,
 ): Promise<MonthlyReport | null> {
   const filePath = getReportPath(year, month);
   try {
@@ -178,7 +209,6 @@ export async function loadReport(
 
 // ─── updateReport 서브 함수 ────────────────────────────────────────────────
 
-
 /** 오프라인 입점처 배열에 추가/삭제/수정 반영 */
 function applyOfflineUpdates(
   existing: OfflineData[],
@@ -187,7 +217,7 @@ function applyOfflineUpdates(
     offlineVenueId?: string;
     addOfflineVenue?: { id: string; name: string };
     removeOfflineVenueId?: string;
-  }
+  },
 ): OfflineData[] {
   let venues = [...existing];
 
@@ -201,7 +231,13 @@ function applyOfflineUpdates(
         totalQuantity: 0,
         handmadeQuantity: 0,
         otherQuantity: 0,
-        fees: { commissionFee: 0, logisticsFee: 0, adFee: 0, settlementAmount: 0 },
+        fees: {
+          commissionFee: 0,
+          logisticsFee: 0,
+          inboundShippingFee: 0,
+          adFee: 0,
+          settlementAmount: 0,
+        },
         profit: { profit: 0, materialCost: 0, netProfit: 0 },
         products: [],
       });
@@ -217,7 +253,9 @@ function applyOfflineUpdates(
       if (venue.venueId !== updates.offlineVenueId) return venue;
       const merged = deepMerge(venue, updates.offline!);
       if (updates.offline!.products !== undefined) {
-        const { products, ...qtySummary } = reclassifyAndSummarize(merged.products);
+        const { products, ...qtySummary } = reclassifyAndSummarize(
+          merged.products,
+        );
         return { ...merged, products, ...qtySummary };
       }
       return merged;
@@ -231,7 +269,7 @@ function applyOfflineUpdates(
 function recalcPlatformProfits(
   naver: NaverData,
   coupang: CoupangData,
-  offlineVenues: OfflineData[]
+  offlineVenues: OfflineData[],
 ): { naver: NaverData; coupang: CoupangData; offline: OfflineData[] } {
   const naverReclassified = reclassifyAndSummarize(naver.products);
   const coupangReclassified = reclassifyAndSummarize(coupang.products);
@@ -243,9 +281,13 @@ function recalcPlatformProfits(
 
   const naverShippingStats = calcNaverShippingStats(
     naver.shippingCollected ?? 0,
-    naver.payerCount ?? 0
+    naver.payerCount ?? 0,
   );
-  const naverFees = { ...naver.fees, logisticsFee: naverShippingStats.sellerCost, adFee: 0 };
+  const naverFees = {
+    ...naver.fees,
+    logisticsFee: naverShippingStats.sellerCost,
+    adFee: 0,
+  };
   const naverWithProfit: NaverData = {
     ...naver,
     fees: naverFees,
@@ -255,8 +297,9 @@ function recalcPlatformProfits(
     handmadeQuantity: naverReclassified.handmadeQuantity,
     otherQuantity: naverReclassified.otherQuantity,
     profit: calcPlatformProfit(
-      naver.revenue, naverFees,
-      naverMaterialBase(naver.revenue, naver.shippingCollected ?? 0)
+      naver.revenue,
+      naverFees,
+      naverMaterialBase(naver.revenue, naver.shippingCollected ?? 0),
     ),
   };
 
@@ -268,18 +311,23 @@ function recalcPlatformProfits(
     handmadeQuantity: coupangReclassified.handmadeQuantity,
     otherQuantity: coupangReclassified.otherQuantity,
     profit: calcPlatformProfit(
-      coupang.revenue, coupang.fees,
-      coupangMaterialBase(coupang.revenue, coupangTotalQty)
+      coupang.revenue,
+      coupang.fees,
+      coupangMaterialBase(coupang.revenue, coupangTotalQty),
     ),
   };
 
-  return { naver: naverWithProfit, coupang: coupangWithProfit, offline: offlineWithProfit };
+  return {
+    naver: naverWithProfit,
+    coupang: coupangWithProfit,
+    offline: offlineWithProfit,
+  };
 }
 
 /** 협찬 데이터 병합 + 수량/비용 자동 재계산 */
 function mergeSponsorshipData(
   existing: SponsorshipData | undefined,
-  patch: DeepPartial<SponsorshipData> | undefined
+  patch: DeepPartial<SponsorshipData> | undefined,
 ): SponsorshipData {
   const base = existing ?? DEFAULT_SPONSORSHIP;
   const merged = patch ? deepMerge(base, patch) : base;
@@ -318,28 +366,41 @@ export async function updateReport(
     removeOfflineVenueId?: string;
     sponsorship?: DeepPartial<SponsorshipData>;
     insights?: MonthlyReport["insights"];
-  }
+  },
 ): Promise<MonthlyReport> {
   const existing = await loadReport(year, month);
   if (!existing) {
-    throw new Error(`${year}년 ${month}월 레포트가 없습니다. 먼저 수집을 실행해주세요.`);
+    throw new Error(
+      `${year}년 ${month}월 레포트가 없습니다. 먼저 수집을 실행해주세요.`,
+    );
   }
 
   // 1) 플랫폼 데이터 병합
-  const naver = updates.naver ? deepMerge(existing.naver, updates.naver) : existing.naver;
-  const coupang = updates.coupang ? deepMerge(existing.coupang, updates.coupang) : existing.coupang;
+  const naver = updates.naver
+    ? deepMerge(existing.naver, updates.naver)
+    : existing.naver;
+  const coupang = updates.coupang
+    ? deepMerge(existing.coupang, updates.coupang)
+    : existing.coupang;
   const offlineVenues = applyOfflineUpdates(existing.offline, updates);
 
   // 2) 카테고리 재분류 + 이익 재계산
   const platforms = recalcPlatformProfits(naver, coupang, offlineVenues);
 
   // 3) 협찬 데이터 병합
-  const sponsorship = mergeSponsorshipData(existing.sponsorship, updates.sponsorship);
+  const sponsorship = mergeSponsorshipData(
+    existing.sponsorship,
+    updates.sponsorship,
+  );
 
   // 4) 파생 필드 재계산 (summary·ranking·matrix)
   const mapping = await loadProductMapping();
   const derived = rebuildDerivedFields(
-    platforms.naver, platforms.coupang, platforms.offline, sponsorship, mapping
+    platforms.naver,
+    platforms.coupang,
+    platforms.offline,
+    sponsorship,
+    mapping,
   );
 
   const now = new Date().toISOString();
@@ -349,9 +410,7 @@ export async function updateReport(
     sponsorship,
     ...derived,
     insights: updates.insights ?? existing.insights,
-    insightsGeneratedAt: updates.insights
-      ? now
-      : existing.insightsGeneratedAt,
+    insightsGeneratedAt: updates.insights ? now : existing.insightsGeneratedAt,
     lastModifiedAt: now,
   };
 
@@ -371,16 +430,14 @@ export async function listReports(): Promise<
       const [y, m] = f.replace(".json", "").split("-").map(Number);
       return { year: y, month: m };
     })
-    .sort((a, b) =>
-      a.year !== b.year ? b.year - a.year : b.month - a.month
-    );
+    .sort((a, b) => (a.year !== b.year ? b.year - a.year : b.month - a.month));
 }
 
 /** 최근 N개월 히스토리 로드 (인사이트 생성용) — [전달, 전전달, ...] 순 */
 export async function loadRecentHistory(
   year: number,
   month: number,
-  count: number
+  count: number,
 ): Promise<(MonthlyReport | null)[]> {
   const results: (MonthlyReport | null)[] = [];
   let y = year,
@@ -393,4 +450,3 @@ export async function loadRecentHistory(
   }
   return results;
 }
-

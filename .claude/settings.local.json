@@ -4,7 +4,29 @@
       "Bash(npx tsc --noEmit 2>&1)",
       "Bash(node_modules/.bin/tsc --noEmit 2>&1)",
       "Bash(npm install --silent 2>&1 | tail -5)",
-      "mcp__playwright__browser_evaluate"
+      "mcp__playwright__browser_evaluate",
+      "Bash(gh label:*)",
+      "Bash(npm install:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(node:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "WebSearch",
+      "WebFetch(domain:developers.coupangcorp.com)",
+      "WebFetch(domain:www.sellerking.io)",
+      "Bash(git checkout:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(kill 28353)",
+      "Bash(kill -9 28353)",
+      "Bash(find /Users/ihyewon/custom-revenue-tracker/data/reports -type f -name *.json)",
+      "Bash(grep -r coupang-sales --include=*.ts)",
+      "Bash(gh pr:*)",
+      "Bash(git worktree *)",
+      "Bash(git branch *)",
+      "Bash(rm -rf .claude/plans .claude/worktrees)"
     ]
   }
 }

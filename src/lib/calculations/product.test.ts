@@ -6,7 +6,6 @@ import {
   jaccardSimilarity,
   cleanProductName,
   toCanonical,
-  STOP_WORDS,
 } from "./product";
 import type { ProductSales, ProductMappingConfig } from "@/lib/types";
 

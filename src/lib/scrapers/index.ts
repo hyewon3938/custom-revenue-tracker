@@ -58,7 +58,7 @@ async function createBrowserPage(storageStatePath?: string | null): Promise<{
  */
 export function getDateRange(
   year: number,
-  month: number
+  month: number,
 ): { start: string; end: string } {
   const today = new Date();
   const isCurrentMonth =
@@ -81,7 +81,7 @@ export function getDateRange(
  */
 async function collectNaverData(
   year: number,
-  month: number
+  month: number,
 ): Promise<{ data: NaverData; warnings: ScrapeWarning[] }> {
   const { start, end } = getDateRange(year, month);
   return collectNaverDataViaApi(start, end);
@@ -94,7 +94,7 @@ async function collectNaverData(
  */
 async function collectCoupangData(
   year: number,
-  month: number
+  month: number,
 ): Promise<{ data: CoupangData; warnings: ScrapeWarning[] }> {
   const { start, end } = getDateRange(year, month);
   const warnings: ScrapeWarning[] = [];
@@ -128,7 +128,7 @@ async function collectCoupangData(
     const settlementAttempt = await withRetry(
       "coupang-settlement",
       () => scrapeCoupangSettlement(page, year, month),
-      null
+      null,
     );
     if (settlementAttempt.failed) {
       warnings.push({
@@ -155,6 +155,7 @@ async function collectCoupangData(
   const fees: PlatformFees = {
     commissionFee,
     logisticsFee,
+    inboundShippingFee: 0,
     adFee,
     settlementAmount: 0,
   };
@@ -172,7 +173,9 @@ async function collectCoupangData(
       otherQuantity: totalQuantity - handmadeQuantity,
       fees,
       profit: calcPlatformProfit(
-        revenue, fees, coupangMaterialBase(revenue, totalQuantity)
+        revenue,
+        fees,
+        coupangMaterialBase(revenue, totalQuantity),
       ),
       products,
     },
@@ -188,7 +191,7 @@ async function collectCoupangData(
  */
 export async function collectMonthlyData(
   year: number,
-  month: number
+  month: number,
 ): Promise<{
   naver: NaverData;
   coupang: CoupangData;
@@ -204,33 +207,38 @@ export async function collectMonthlyData(
   ]);
 
   // 재시도 실패 경고 합산
-  const scraperWarnings = [
-    ...naverResult.warnings,
-    ...coupangResult.warnings,
-  ];
+  const scraperWarnings = [...naverResult.warnings, ...coupangResult.warnings];
 
   // 이미 실패 보고된 수집기는 정합성 검증에서 중복 경고 방지
   const failedScrapers = new Set<string>();
   for (const w of scraperWarnings) {
     if (w.level === "error") {
       // 네이버 API 실패 시 관련 검증 규칙 건너뜀
-      if (w.message.includes("네이버 정산 API")) failedScrapers.add("naver-settlement");
-      if (w.message.includes("네이버 주문 API") || w.message.includes("네이버 API")) {
+      if (w.message.includes("네이버 정산 API"))
+        failedScrapers.add("naver-settlement");
+      if (
+        w.message.includes("네이버 주문 API") ||
+        w.message.includes("네이버 API")
+      ) {
         failedScrapers.add("naver-orders");
         failedScrapers.add("naver-sales");
       }
       // 쿠팡 실패
-      if (w.message.includes("쿠팡 주문 API") || w.message.includes("쿠팡 판매분석")) {
+      if (
+        w.message.includes("쿠팡 주문 API") ||
+        w.message.includes("쿠팡 판매분석")
+      ) {
         failedScrapers.add("coupang-orders");
       }
-      if (w.message.includes("쿠팡 정산")) failedScrapers.add("coupang-settlement");
+      if (w.message.includes("쿠팡 정산"))
+        failedScrapers.add("coupang-settlement");
     }
   }
 
   const validationWarnings = validateCollectedData(
     naverResult.data,
     coupangResult.data,
-    failedScrapers
+    failedScrapers,
   );
 
   return {

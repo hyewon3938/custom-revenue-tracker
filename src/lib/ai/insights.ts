@@ -19,7 +19,7 @@ interface GroqResponse {
 async function callGroq(messages: GroqMessage[]): Promise<string> {
   if (!GROQ_API_KEY) {
     throw new Error(
-      "GROQ_API_KEY 환경변수가 설정되지 않았습니다. .env.local에 추가하세요."
+      "GROQ_API_KEY 환경변수가 설정되지 않았습니다. .env.local에 추가하세요.",
     );
   }
 
@@ -117,6 +117,7 @@ function buildPlatformSection(report: Report): string {
 - 매출: ${formatKRW(coupang.revenue)}
 - 수수료: ${formatKRW(coupang.fees.commissionFee)}
 - 풀필먼트 물류비: ${formatKRW(coupang.fees.logisticsFee)}
+- 입고 배송비: ${formatKRW(coupang.fees.inboundShippingFee)}
 - 광고비: ${formatKRW(coupang.fees.adFee)}
 - 이익: ${formatKRW(coupang.profit.profit)} / 순이익: ${formatKRW(coupang.profit.netProfit)}
 - 이익률: ${profitMargin(coupang.revenue, coupang.profit.netProfit)}%
@@ -132,7 +133,7 @@ function buildPlatformSection(report: Report): string {
 - 광고비: ${formatKRW(v.fees.adFee)}
 - 이익: ${formatKRW(v.profit.profit)} / 순이익: ${formatKRW(v.profit.netProfit)}
 - 이익률: ${profitMargin(v.revenue, v.profit.netProfit)}%
-- 판매량: 전체 ${v.totalQuantity}개 · 끈갈피 ${v.handmadeQuantity}개`
+- 판매량: 전체 ${v.totalQuantity}개 · 끈갈피 ${v.handmadeQuantity}개`,
     )
     .join("\n\n");
 
@@ -170,7 +171,7 @@ function buildProductSection(report: Report): string {
       ? overallRanking
           .map(
             (r) =>
-              `${r.rank}위. ${r.productName}: 총 ${r.total}개 (N:${r.naver} / C:${r.coupang} / O:${r.offline})`
+              `${r.rank}위. ${r.productName}: 총 ${r.total}개 (N:${r.naver} / C:${r.coupang} / O:${r.offline})`,
           )
           .join("\n")
       : "데이터 없음";
@@ -189,7 +190,7 @@ function buildProductSection(report: Report): string {
       ? activeProducts
           .map(
             (p) =>
-              `- ${p.productName}: 총 ${p.total}개 (N:${p.naver} / C:${p.coupang} / O:${p.offline})`
+              `- ${p.productName}: 총 ${p.total}개 (N:${p.naver} / C:${p.coupang} / O:${p.offline})`,
           )
           .join("\n")
       : "데이터 없음";
@@ -231,25 +232,17 @@ function buildSponsorshipSection(report: Report): string {
 }
 
 /** 히스토리에서 존재하는 레포트만 시간 역순으로 정렬 (과거→현재) */
-function validHistory(
-  report: Report,
-  history: (Report | null)[]
-): Report[] {
+function validHistory(report: Report, history: (Report | null)[]): Report[] {
   const past = history.filter((r): r is Report => r !== null).reverse();
   return [...past, report];
 }
 
-function buildTrendSection(
-  report: Report,
-  history: (Report | null)[]
-): string {
+function buildTrendSection(report: Report, history: (Report | null)[]): string {
   const timeline = validHistory(report, history);
   if (timeline.length < 2) return "";
 
   // 3개월 추이 테이블
-  const header = timeline
-    .map((r) => `${r.period.month}월`)
-    .join(" | ");
+  const header = timeline.map((r) => `${r.period.month}월`).join(" | ");
   const separator = timeline.map(() => "---").join(" | ");
 
   const row = (label: string, fn: (r: Report) => string) =>
@@ -276,10 +269,10 @@ ${row("협찬 수량", (r) => `${r.sponsorship?.totalQuantity ?? 0}개`)}`;
   const prevTopNames = new Set(prev.overallRanking.map((r) => r.productName));
   const currTopNames = new Set(report.overallRanking.map((r) => r.productName));
   const newInTop = report.overallRanking.filter(
-    (r) => !prevTopNames.has(r.productName)
+    (r) => !prevTopNames.has(r.productName),
   );
   const droppedFromTop = prev.overallRanking.filter(
-    (r) => !currTopNames.has(r.productName)
+    (r) => !currTopNames.has(r.productName),
   );
 
   // 협찬 지연 효과: 이전 달 협찬 상품이 당월에 얼마나 팔렸는지
@@ -290,7 +283,9 @@ ${row("협찬 수량", (r) => `${r.sponsorship?.totalQuantity ?? 0}개`)}`;
     const delayRows = prevSponsoredNames
       .map((name) => {
         const currRow = currentMatrix.find((p) => p.productName === name);
-        const prevRow = (prev.productMatrix ?? []).find((p) => p.productName === name);
+        const prevRow = (prev.productMatrix ?? []).find(
+          (p) => p.productName === name,
+        );
         return `- ${name}: 전달 ${prevRow?.total ?? 0}개 → 당월 ${currRow?.total ?? 0}개`;
       })
       .join("\n");
@@ -315,7 +310,7 @@ ${droppedFromTop.length > 0 ? `- TOP5 이탈: ${droppedFromTop.map((r) => `${r.p
 
 function buildOverviewSection(
   report: Report,
-  overview: MonthlyOverview[]
+  overview: MonthlyOverview[],
 ): string {
   // 당월 포함 최소 3개월 이상일 때만 의미 있음
   if (overview.length < 3) return "";
@@ -341,9 +336,11 @@ ${row("쿠팡 광고비", (m) => formatKRW(m.coupangAdFee))}
 ${row("협찬 비용", (m) => formatKRW(m.sponsorshipCost))}
 ${row("마케팅 합계", (m) => formatKRW(m.naverAdFee + m.coupangAdFee + m.sponsorshipCost))}
 ${row("광고비/매출 비율", (m) => {
-    const adTotal = m.naverAdFee + m.coupangAdFee;
-    return m.totalRevenue > 0 ? `${((adTotal / m.totalRevenue) * 100).toFixed(1)}%` : "0%";
-  })}`;
+  const adTotal = m.naverAdFee + m.coupangAdFee;
+  return m.totalRevenue > 0
+    ? `${((adTotal / m.totalRevenue) * 100).toFixed(1)}%`
+    : "0%";
+})}`;
 
   // 전체 누적 요약
   const totals = overview.reduce(
@@ -352,7 +349,7 @@ ${row("광고비/매출 비율", (m) => {
       netProfit: acc.netProfit + m.totalNetProfit,
       quantity: acc.quantity + m.totalQuantity,
     }),
-    { revenue: 0, netProfit: 0, quantity: 0 }
+    { revenue: 0, netProfit: 0, quantity: 0 },
   );
   const avgMargin =
     totals.revenue > 0
@@ -377,7 +374,7 @@ ${table}
 export function buildPrompt(
   report: Report,
   history?: (Report | null)[],
-  overview?: MonthlyOverview[]
+  overview?: MonthlyOverview[],
 ): string {
   const sections = [
     buildPeriodSection(report),
@@ -532,7 +529,7 @@ interface TypeDeficit {
 function findTypeDeficit(insights: SalesInsight[]): TypeDeficit {
   const actionCount = insights.filter((i) => i.type === "action").length;
   const posNegCount = insights.filter(
-    (i) => i.type === "positive" || i.type === "negative"
+    (i) => i.type === "positive" || i.type === "negative",
   ).length;
 
   return {
@@ -544,7 +541,7 @@ function findTypeDeficit(insights: SalesInsight[]): TypeDeficit {
 /** 부족한 타입만 보충 요청하는 프롬프트 생성 */
 function buildSupplementPrompt(
   existing: SalesInsight[],
-  deficit: TypeDeficit
+  deficit: TypeDeficit,
 ): string {
   const existingList = existing
     .map((i) => `- [${i.type}] ${i.title}`)
@@ -553,13 +550,11 @@ function buildSupplementPrompt(
   const requests: string[] = [];
   if (deficit.action > 0) {
     requests.push(
-      `- **action** 타입 ${deficit.action}개 (구체적이고 즉시 실행 가능한 액션)`
+      `- **action** 타입 ${deficit.action}개 (구체적이고 즉시 실행 가능한 액션)`,
     );
   }
   if (deficit.posNeg > 0) {
-    requests.push(
-      `- **positive 또는 negative** 타입 ${deficit.posNeg}개`
-    );
+    requests.push(`- **positive 또는 negative** 타입 ${deficit.posNeg}개`);
   }
 
   return `기존에 생성된 인사이트:
@@ -678,7 +673,7 @@ function parseInsightsJson(text: string): SalesInsight[] | null {
 export async function generateSalesInsights(
   report: Report,
   history?: (Report | null)[],
-  overview?: MonthlyOverview[]
+  overview?: MonthlyOverview[],
 ): Promise<SalesInsight[]> {
   const prompt = buildPrompt(report, history, overview);
 
