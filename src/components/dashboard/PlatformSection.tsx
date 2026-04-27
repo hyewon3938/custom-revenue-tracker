@@ -131,7 +131,7 @@ function CoupangCard({
         }));
       await onUpdate({ coupang: { products } });
     },
-    [editList, onUpdate]
+    [editList, onUpdate],
   );
 
   return (
@@ -155,6 +155,13 @@ function CoupangCard({
       <Row
         label="풀필먼트 물류비"
         value={<KRWText n={data.fees.logisticsFee} />}
+      />
+      <EditRow
+        label="입고 배송비"
+        value={data.fees.inboundShippingFee}
+        onSave={(v) =>
+          onUpdate({ coupang: { fees: { inboundShippingFee: v } } })
+        }
       />
       <Row label="광고비" value={<KRWText n={data.fees.adFee} />} />
 
@@ -212,7 +219,7 @@ function OfflineCard({
         }));
       await onUpdate({ offline: { products } });
     },
-    [productMatrix, onUpdate]
+    [productMatrix, onUpdate],
   );
 
   const isGosan = data.venueId === "gosan";
@@ -317,10 +324,10 @@ export default function PlatformSection({
     totalCards <= 2
       ? "grid-cols-1 md:grid-cols-2"
       : totalCards === 3
-      ? "grid-cols-1 md:grid-cols-3"
-      : totalCards === 4
-      ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
-      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+        ? "grid-cols-1 md:grid-cols-3"
+        : totalCards === 4
+          ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
+          : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
 
   return (
     <section>

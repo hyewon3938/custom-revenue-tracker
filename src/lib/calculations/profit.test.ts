@@ -21,6 +21,7 @@ function makeFees(overrides: Partial<PlatformFees> = {}): PlatformFees {
   return {
     commissionFee: 0,
     logisticsFee: 0,
+    inboundShippingFee: 0,
     adFee: 0,
     settlementAmount: 0,
     ...overrides,
@@ -28,7 +29,7 @@ function makeFees(overrides: Partial<PlatformFees> = {}): PlatformFees {
 }
 
 function makeOfflineVenue(
-  overrides: Partial<OfflineData> & { venueId: string }
+  overrides: Partial<OfflineData> & { venueId: string },
 ): OfflineData {
   return {
     venueName: overrides.venueId,
@@ -295,7 +296,12 @@ describe("calcOverallSummary", () => {
   });
 
   test("marketingCost가 있으면 totalNetProfit에서 차감한다", () => {
-    const result = calcOverallSummary(naverData, coupangData, offlineVenues, 5000);
+    const result = calcOverallSummary(
+      naverData,
+      coupangData,
+      offlineVenues,
+      5000,
+    );
     expect(result.marketingCost).toBe(5000);
     expect(result.totalNetProfit).toBe(165800); // 170800 - 5000
   });

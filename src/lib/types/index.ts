@@ -20,6 +20,7 @@ export interface ProductSales {
 export interface PlatformFees {
   commissionFee: number; // 플랫폼 수수료
   logisticsFee: number; // 물류비 (네이버: 판매자부담 배송비 / 쿠팡: 풀필먼트비용)
+  inboundShippingFee: number; // 입고 배송비 (쿠팡: 풀필먼트 입고 시 셀러 부담 택배비, 수기 / 그 외: 0)
   adFee: number; // 광고비 (쿠팡: 자동 / 오프라인: 수기 / 네이버: 미사용=0)
   settlementAmount: number; // 정산금 (참고용 — 네이버: 자동, 쿠팡: 0, 오프라인: 수기)
 }
@@ -58,14 +59,14 @@ export interface CoupangData {
 
 // ─── 오프라인 입점처 정보 (레지스트리) ────────────────────────────────────
 export interface VenueInfo {
-  id: string;        // slug 기반 고유 ID (예: "gosan")
-  name: string;      // 입점처명 (예: "고산의낮")
-  createdAt: string;  // ISO 8601
+  id: string; // slug 기반 고유 ID (예: "gosan")
+  name: string; // 입점처명 (예: "고산의낮")
+  createdAt: string; // ISO 8601
 }
 
 // ─── 오프라인 입점처 데이터 — 전체 수기 입력 ─────────────────────────────
 export interface OfflineData {
-  venueId: string;   // 입점처 레지스트리 ID 참조
+  venueId: string; // 입점처 레지스트리 ID 참조
   venueName: string; // 입점처명 (기본값: "고산의낮")
   revenue: number;
   totalQuantity: number;
@@ -81,10 +82,11 @@ export interface OverallSummary {
   totalRevenue: number;
   totalCommissionFee: number;
   totalLogisticsFee: number;
+  totalInboundShippingFee: number;
   totalAdFee: number;
   totalProfit: number;
   totalMaterialCost: number;
-  marketingCost: number;    // 협찬 마케팅 비용 (totalNetProfit에서 차감됨)
+  marketingCost: number; // 협찬 마케팅 비용 (totalNetProfit에서 차감됨)
   totalNetProfit: number;
   // 판매량
   totalQuantity: number;
@@ -117,18 +119,18 @@ export interface ProductMatrixRow {
 
 /** 협찬 제공 상품 1건 */
 export interface SponsoredItem {
-  productName: string;       // canonical 상품명 (productMatrix 기준)
+  productName: string; // canonical 상품명 (productMatrix 기준)
   category: ProductCategory;
   quantity: number;
-  unitPrice?: number;        // 협찬 단가 (원) — 있으면 marketingCost 자동 계산
+  unitPrice?: number; // 협찬 단가 (원) — 있으면 marketingCost 자동 계산
 }
 
 /** 협찬 마케팅 전체 데이터 (수기 입력) */
 export interface SponsorshipData {
-  items: SponsoredItem[];        // 협찬 제공 상품 목록
-  marketingCost: number;         // 마케팅 비용 (순이익에서 차감)
-  totalQuantity: number;         // 총 협찬 제공 수량 (자동 계산)
-  handmadeQuantity: number;      // 끈갈피 협찬 제공 수량 (자동 계산)
+  items: SponsoredItem[]; // 협찬 제공 상품 목록
+  marketingCost: number; // 마케팅 비용 (순이익에서 차감)
+  totalQuantity: number; // 총 협찬 제공 수량 (자동 계산)
+  handmadeQuantity: number; // 끈갈피 협찬 제공 수량 (자동 계산)
 }
 
 // ─── 상품 매핑 (네이버↔쿠팡 상품명 연결) ─────────────────────────────────
@@ -147,13 +149,13 @@ export interface ProductMappingConfig {
 // ─── Claude AI 인사이트 ───────────────────────────────────────────────────
 
 export type InsightCategory =
-  | "revenue"       // 매출 동향
-  | "profit"        // 이익률/비용 구조
-  | "product"       // 상품 전략
-  | "platform"      // 플랫폼 비교
-  | "ad"            // 광고 효율
-  | "sponsorship"   // 협찬 마케팅 효과
-  | "trend";        // 전달 대비 추세
+  | "revenue" // 매출 동향
+  | "profit" // 이익률/비용 구조
+  | "product" // 상품 전략
+  | "platform" // 플랫폼 비교
+  | "ad" // 광고 효율
+  | "sponsorship" // 협찬 마케팅 효과
+  | "trend"; // 전달 대비 추세
 
 export interface SalesInsight {
   title: string;
@@ -167,25 +169,25 @@ export interface SalesInsight {
 /** 전체 인사이트 뷰에서 사용하는 월별 집계 데이터 (차트 X축 단위) */
 export interface MonthlyOverview {
   period: { year: number; month: number };
-  label: string;              // "2025.12" — 차트 X축 레이블
+  label: string; // "2025.12" — 차트 X축 레이블
   totalRevenue: number;
   totalNetProfit: number;
   totalQuantity: number;
   handmadeQuantity: number;
   otherQuantity: number;
-  marginRate: number;         // 소수점 1자리 % (서버에서 미리 계산)
+  marginRate: number; // 소수점 1자리 % (서버에서 미리 계산)
   naverRevenue: number;
   coupangRevenue: number;
   offlineRevenue: number;
   // 마케팅 비용
   naverAdFee: number;
   coupangAdFee: number;
-  sponsorshipCost: number;    // 협찬 마케팅 비용 (부자재비)
+  sponsorshipCost: number; // 협찬 마케팅 비용 (부자재비)
 }
 
 /** GET /api/overview 응답 타입 */
 export interface OverviewResponse {
-  months: MonthlyOverview[];  // 오름차순 정렬 (차트 X축 좌→우)
+  months: MonthlyOverview[]; // 오름차순 정렬 (차트 X축 좌→우)
   totals: {
     totalQuantity: number;
     handmadeQuantity: number;
@@ -214,18 +216,18 @@ export interface MonthlyReport {
   naver: NaverData;
   coupang: CoupangData;
   offline: OfflineData[];
-  sponsorship: SponsorshipData;       // 협찬 마케팅 데이터 (수기 입력)
+  sponsorship: SponsorshipData; // 협찬 마케팅 데이터 (수기 입력)
   summary: OverallSummary;
   // 랭킹
-  naverRanking: ProductRankEntry[];           // 네이버 TOP3
-  coupangRanking: ProductRankEntry[];         // 쿠팡 TOP3
-  offlineRanking: ProductRankEntry[];         // 오프라인 TOP3
-  overallRanking: ProductRankEntry[];         // 전체 통합 TOP5
+  naverRanking: ProductRankEntry[]; // 네이버 TOP3
+  coupangRanking: ProductRankEntry[]; // 쿠팡 TOP3
+  offlineRanking: ProductRankEntry[]; // 오프라인 TOP3
+  overallRanking: ProductRankEntry[]; // 전체 통합 TOP5
   sponsorExcludedRanking: ProductRankEntry[]; // 협찬 제외 TOP5
   productMatrix: ProductMatrixRow[]; // 상품 × 플랫폼 표
   insights: SalesInsight[];
   insightsGeneratedAt?: string; // ISO 8601 — 인사이트가 마지막으로 생성된 시각
-  warnings: ScrapeWarning[];  // 수집 시 경고
+  warnings: ScrapeWarning[]; // 수집 시 경고
   collectedAt: string; // ISO 8601
   lastModifiedAt: string; // ISO 8601
 }

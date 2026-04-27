@@ -14,7 +14,11 @@ interface Props {
  * Enter / blur → onSave 호출 → 저장 완료 후 원래 표시로 복귀.
  * Escape → 취소.
  */
-export default function EditableField({ value, onSave, className = "" }: Props) {
+export default function EditableField({
+  value,
+  onSave,
+  className = "",
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState("");
   const [saving, setSaving] = useState(false);
@@ -50,7 +54,7 @@ export default function EditableField({ value, onSave, className = "" }: Props) 
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className={`w-32 border-b-2 border-brand-400 outline-none bg-brand-50 px-1 py-0.5 text-right font-semibold text-sm ${className}`}
+        className={`w-32 -mr-1 border-b-2 border-brand-400 outline-none bg-brand-50 px-1 py-0.5 text-right font-semibold text-sm ${className}`}
         disabled={saving}
       />
     );
@@ -60,7 +64,7 @@ export default function EditableField({ value, onSave, className = "" }: Props) 
     <button
       onClick={startEdit}
       title="클릭하여 편집"
-      className={`hover:bg-brand-50 hover:text-brand-600 rounded px-1 py-0.5 transition-colors cursor-text text-right font-semibold text-sm ${saving ? "opacity-40" : ""} ${className}`}
+      className={`-mr-1 hover:bg-brand-50 hover:text-brand-600 rounded px-1 py-0.5 transition-colors cursor-text text-right font-semibold text-sm ${saving ? "opacity-40" : ""} ${className}`}
     >
       <KRWText n={value} />
     </button>

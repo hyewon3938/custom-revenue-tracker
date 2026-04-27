@@ -8,6 +8,7 @@ import type { PlatformFees, SponsorshipData } from "@/lib/types";
 export const EMPTY_FEES: PlatformFees = {
   settlementAmount: 0,
   logisticsFee: 0,
+  inboundShippingFee: 0,
   commissionFee: 0,
   adFee: 0,
 };
