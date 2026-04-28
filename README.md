@@ -16,7 +16,7 @@
 - [아키텍처 & 설계 결정](#-아키텍처--설계-결정)
 - [AI 인사이트 엔진](#-ai-인사이트-엔진)
 - [코드 컨벤션 & 품질 관리](#-코드-컨벤션--품질-관리)
-- [데이터 수집 & 에러 처리 UX](#-데이터-수집--에러-처리-ux)
+- [데이터 수집 — API 우선 + 스크래핑 Fallback](#-데이터-수집--api-우선--스크래핑-fallback)
 - [설치 및 실행](#-설치-및-실행)
 - [데이터 구조 & 보안](#-데이터-구조--보안)
 
@@ -26,7 +26,7 @@
 
 | 기능 | 설명 |
 |------|------|
-| **자동 데이터 수집** | Playwright 브라우저 자동화로 네이버·쿠팡 매출·정산·주문 데이터 스크래핑 |
+| **자동 데이터 수집** | Naver Commerce API + Coupang RG Order API + Playwright 스크래핑(쿠팡 정산) hybrid로 매출·정산·주문 데이터 수집 |
 | **멀티채널 데이터 통합** | 3개 플랫폼의 서로 다른 데이터 구조를 통합 스키마로 정규화 |
 | **AI 인사이트 생성** | Groq API(Llama 3.3 70B) 기반 8개 카테고리 비즈니스 인사이트 자동 분석 |
 | **누적 트렌드 차트** | 월별 매출·판매량·마진율·마케팅 비용 4종 차트 (Recharts) |
@@ -85,7 +85,9 @@ Groq AI가 생성한 **주의·액션·관찰·긍정** 4가지 타입의 인사
 | **Language** | TypeScript (strict) | 도메인 모델의 타입 안전성 확보 |
 | **Styling** | Tailwind CSS | 빠른 UI 프로토타이핑, 컴포넌트별 스타일 응집 |
 | **Charts** | Recharts | React 네이티브 차트, 커스텀 자유도 |
-| **Scraping** | Playwright | SPA iframe·동적 캘린더 등 복잡한 DOM 대응 |
+| **Naver Data** | Naver Commerce API | OAuth 2.0 + bcrypt 서명, 토큰 캐싱 — 스크래핑 대비 안정성·속도 우위 |
+| **Coupang Data** | Coupang Wing API (RG Order) | HMAC-SHA256 서명 — 주문 데이터 API 직접 수집 |
+| **Scraping** | Playwright | API 미제공 영역(쿠팡 정산) 보조 수집 |
 | **AI** | Groq API (Llama 3.3 70B) | 무료 티어로 빠른 추론, 한국어 인사이트 생성 |
 | **Testing** | Vitest | TypeScript + ESM + path alias 네이티브 지원 |
 | **Storage** | 파일 기반 JSON | 1인 로컬 도구 — DB 설치 없이 즉시 사용 가능 |
@@ -241,21 +243,52 @@ npx vitest run   # 130개 테스트, 7개 테스트 파일
 
 <br>
 
-## 🛡 데이터 수집 & 에러 처리 UX
+## 🛡 데이터 수집 — API 우선 + 스크래핑 Fallback
 
-### 멀티플랫폼 스크래핑
+### 진화 과정
 
-Playwright 기반 스크레이퍼를 **5개 모듈**로 분리 설계했습니다:
+초기에는 모든 플랫폼을 Playwright 스크래핑으로 빠르게 구축해 4일 만에 MVP를 완성했습니다. 이후 운영하며 다음과 같은 스크래핑의 본질적 한계를 마주했습니다:
 
-| 모듈 | 수집 대상 | 해결한 기술 과제 |
-|------|----------|----------------|
-| `naver-orders` | 주문통합검색 → 제품별 수량 | SPA iframe 내부 탐색, TOAST UI Grid 페이지네이션 |
-| `naver-sales` | 판매분석 → 총 매출 | `biz_iframe` 내부 날짜 설정 |
-| `naver-settlement` | 정산내역 → 비용 항목 | 커스텀 DatePicker 대응 |
-| `coupang-sales` | 판매분석 → 매출+제품별 수량 | `dp__` 커스텀 캘린더, value-before-label 패턴 |
-| `coupang-settlement` | 로켓그로스 정산 → 비용 항목 | custom-selection 캘린더, 정규식 기반 비용 파싱 |
+- DOM 변경 시 즉시 깨짐 (플랫폼 UI 업데이트마다 재대응 필요)
+- 브라우저 띄우는 비용 (메모리·시간)
+- 세션 만료 시 수동 재로그인 부담
+- 동적 캘린더·iframe 등 DOM 의존 코드의 유지보수 비용
 
-### 안정성 확보
+이를 해결하기 위해 **API 제공 영역은 모두 API로 전환**하고, **API 미제공 영역만 스크래핑으로 보조**하는 hybrid 구조로 마이그레이션했습니다.
+
+### 현재 구조
+
+| 플랫폼 | 영역 | 수집 방식 | 비고 |
+|--------|------|----------|------|
+| **네이버** | 주문 (매출·결제자수·배송비·제품별 수량) | Naver Commerce API | 100% API 전환 |
+| **네이버** | 정산 (수수료) | Naver Commerce API | 100% API 전환 |
+| **쿠팡** | 주문 (제품별 수량·매출 합계) | Coupang RG Order API | 브라우저 불필요 |
+| **쿠팡** | 정산 (수수료·물류비·광고비) | Playwright 스크래핑 | RG 정산 API 미제공으로 잔존 |
+| **오프라인** | 매출·수량 | 수기 입력 | 입점처별 다중 등록 |
+
+→ **네이버는 브라우저 완전 불필요**, 쿠팡은 정산 1건만 브라우저 필요. 안정성·속도·유지보수성 모두 개선.
+
+### API 인증 직접 구현
+
+#### 네이버 Commerce API — OAuth 2.0 + bcrypt 서명
+
+```
+1. clientId + "_" + timestamp 를 clientSecret으로 bcrypt 해싱 → base64 인코딩
+2. POST /external/v1/oauth2/token 으로 access_token 발급
+3. 토큰 만료 1분 전까지 메모리 캐싱 (재발급 비용 최소화)
+```
+
+#### 쿠팡 Wing API — HMAC-SHA256 서명
+
+```
+1. message = datetime(yyMMddTHHmmssZ) + method + path + query
+2. HMAC-SHA256(message, secretKey) → hex 인코딩
+3. Authorization 헤더: CEA algorithm=HmacSHA256, access-key=..., signed-date=..., signature=...
+```
+
+### 스크래핑 모듈 (잔존 영역)
+
+쿠팡 정산만 Playwright 스크래핑으로 수집합니다. 다음 안정성 장치를 적용했습니다:
 
 - **자동 재시도 래퍼(`withRetry`)**: 네트워크 지연·DOM 로딩 실패 시 최대 3회 재시도
 - **세션 기반 로그인 유지**: `.browser-session/`에 쿠키 저장, 세션 만료 전까지 재사용
@@ -263,7 +296,7 @@ Playwright 기반 스크레이퍼를 **5개 모듈**로 분리 설계했습니�
 
 ### 수집 오류 UX
 
-스크래핑 중 일부 항목 수집에 실패하면, 어떤 데이터가 누락되었는지를 **구체적인 경고 배너로 안내**합니다. 사용자는 배너 내용을 확인한 뒤 데이터 수집을 재시도하거나, 직접 수기로 값을 입력해 보정할 수 있습니다.
+API 호출 실패 또는 스크래핑 일부 실패 시, 어떤 데이터가 누락되었는지를 **구체적인 경고 배너로 안내**합니다. 사용자는 배너 내용을 확인한 뒤 데이터 수집을 재시도하거나, 직접 수기로 값을 입력해 보정할 수 있습니다.
 
 <br>
 
@@ -285,22 +318,31 @@ npm run dev
 프로젝트 루트에 `.env.local` 파일을 생성합니다.
 
 ```env
-# Groq AI 인사이트 생성 (https://console.groq.com)
+# ─── Naver Commerce API (https://apicenter.commerce.naver.com) ─────────
+NAVER_CLIENT_ID=your_client_id
+NAVER_CLIENT_SECRET=your_client_secret
+
+# ─── Coupang Wing API (https://wing.coupang.com) ──────────────────────
+COUPANG_VENDOR_ID=A00000000
+COUPANG_ACCESS_KEY=your_access_key
+COUPANG_SECRET_KEY=your_secret_key
+
+# ─── Groq AI 인사이트 생성 (https://console.groq.com) ──────────────────
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
 
-# 부자재비 비율 (매출 대비 %, 예: 12)
+# ─── 부자재비 비율 (매출 대비 %, 예: 12) ────────────────────────────
 ONLINE_MATERIAL_RATE=12
 OFFLINE_MATERIAL_RATE=15
 
-# 협찬 1개당 원가 (원, 예: 4800)
+# ─── 협찬 1개당 원가 (원, 예: 4800) ──────────────────────────────────
 REVIEW_MARKETING_COST_PER_HANDMADE=4800
 ```
 
 ### 데이터 수집 방법
 
-대시보드 상단의 **"데이터 수집"** 버튼을 클릭하면 네이버·쿠팡 스크래핑과 상품 매핑 동기화가 자동으로 실행됩니다.
+대시보드 상단의 **"데이터 수집"** 버튼을 클릭하면 네이버·쿠팡 데이터 수집(API + 정산 스크래핑)과 상품 매핑 동기화가 자동으로 실행됩니다.
 
-> 최초 실행 시 저장된 브라우저 세션(`.browser-session/`)이 필요하며, 세션이 없으면 네이버·쿠팡에 직접 로그인해야 합니다.
+> 네이버는 100% API로 수집되어 브라우저가 필요 없으며, 쿠팡은 주문은 API로, 정산만 Playwright로 수집됩니다. 쿠팡 정산 수집을 위해 최초 실행 시 저장된 브라우저 세션(`.browser-session/`)이 필요하며, 세션이 없으면 쿠팡 Wing에 직접 로그인해야 합니다.
 
 <br>
 
