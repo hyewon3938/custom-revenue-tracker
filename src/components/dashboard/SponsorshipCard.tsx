@@ -12,7 +12,11 @@ interface Props {
   onUpdate: (patch: object) => Promise<void>;
 }
 
-export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }: Props) {
+export default function SponsorshipCard({
+  sponsorship,
+  productMatrix,
+  onUpdate,
+}: Props) {
   const hasUnitPrices =
     sponsorship.items.length > 0 &&
     sponsorship.items.every((i) => i.unitPrice != null && i.unitPrice > 0);
@@ -21,7 +25,7 @@ export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }
     async (items: SponsoredItem[]) => {
       await onUpdate({ sponsorship: { items } });
     },
-    [onUpdate]
+    [onUpdate],
   );
 
   return (
@@ -55,18 +59,21 @@ export default function SponsorshipCard({ sponsorship, productMatrix, onUpdate }
 
         {sponsorship.marketingCost > 0 && (
           <p className="text-xs text-gray-400 mt-1 mb-3">
-            순이익에서 {sponsorship.marketingCost.toLocaleString("ko-KR")}원 차감됩니다.
+            순이익에서 {sponsorship.marketingCost.toLocaleString("ko-KR")}원
+            차감됩니다.
           </p>
         )}
 
         {/* 계산식 툴팁 */}
         <div className="bg-warm-50 rounded-lg px-3 py-2.5 mb-1">
           <p className="text-xs text-gray-600 leading-relaxed">
-            <span className="font-medium">광고비 계산:</span>{" "}
-            (단가 + 배송비 3,000) × (VAT 10% + 수수료 2.857%) + 실배송비 3,300
+            <span className="font-medium">협찬 비용 계산:</span> (단가 + 배송비
+            3,000) × 1.1 (VAT 포함)
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            재료비는 플랫폼 매출 정산에서 이미 차감되므로 포함하지 않습니다.
+            매출에 잡힌 협찬 분을 순이익에서 환불 처리합니다. 정산
+            수수료·부자재비·배송비 차액은 자동 계산에서 별도 차감되어 중복되지
+            않습니다.
           </p>
         </div>
 
