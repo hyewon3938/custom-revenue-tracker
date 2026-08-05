@@ -18,34 +18,57 @@ import { validateCollectedData } from "./validate";
 import { collectNaverDataViaApi } from "@/lib/naver-api/collect";
 import { collectCoupangOrdersViaApi } from "@/lib/coupang-api/collect";
 
-const BROWSER_UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
 /**
  * 공통 브라우저 + 컨텍스트 + 페이지 생성.
  * storageStatePath가 주어지면 저장된 쿠키/스토리지를 복원한다.
  * 세션 파일이 손상된 경우 경고 후 빈 컨텍스트로 재시도.
+ *
+ * 쿠팡윙(wing.coupang.com)은 Akamai Bot Manager로 자동화 브라우저를 차단하므로
+ * 봇 지문을 최소화한다:
+ * - 시스템 Chrome 채널 우선 실행 (없으면 기본 Chromium로 fallback)
+ * - --disable-blink-features=AutomationControlled 로 navigator.webdriver 노출 차단
+ * - addInitScript 로 navigator.webdriver 를 한 번 더 은폐
+ * - UA 오버라이드 제거 → 실제 브라우저 버전을 그대로 사용해 버전 불일치 신호 제거
  */
 async function createBrowserPage(storageStatePath?: string | null): Promise<{
   browser: Browser;
   context: BrowserContext;
   page: Page;
 }> {
-  const browser = await chromium.launch({
+  const launchOptions = {
     headless: false,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-blink-features=AutomationControlled",
+    ],
+  };
+
+  let browser: Browser;
+  try {
+    // 실제 설치된 Chrome 사용 (Chromium보다 봇 지문이 적음)
+    browser = await chromium.launch({ ...launchOptions, channel: "chrome" });
+  } catch {
+    console.warn(
+      "[브라우저] 시스템 Chrome을 찾지 못함 — 기본 Chromium으로 실행",
+    );
+    browser = await chromium.launch(launchOptions);
+  }
 
   let context: BrowserContext;
   try {
-    context = await browser.newContext({
-      userAgent: BROWSER_UA,
-      ...(storageStatePath ? { storageState: storageStatePath } : {}),
-    });
+    context = await browser.newContext(
+      storageStatePath ? { storageState: storageStatePath } : {},
+    );
   } catch {
     console.warn("[세션] 세션 파일 로드 실패 — 새 컨텍스트로 재시도");
-    context = await browser.newContext({ userAgent: BROWSER_UA });
+    context = await browser.newContext();
   }
+
+  // navigator.webdriver 은폐 (launch 플래그의 이중 안전장치)
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
 
   const page = await context.newPage();
   return { browser, context, page };

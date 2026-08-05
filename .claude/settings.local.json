@@ -26,7 +26,8 @@
       "Bash(gh pr:*)",
       "Bash(git worktree *)",
       "Bash(git branch *)",
-      "Bash(rm -rf .claude/plans .claude/worktrees)"
+      "Bash(rm -rf .claude/plans .claude/worktrees)",
+      "mcp__claude-in-chrome__list_connected_browsers"
     ]
   }
 }

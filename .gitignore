@@ -53,3 +53,7 @@ next-env.d.ts
 
 # 이전 프로젝트명 잔여물
 /leecommit-sales-dashboard/
+
+# Claude Code 작업 산출물 (임시 워크트리·계획 파일)
+/.claude/worktrees/
+/.claude/plans/
