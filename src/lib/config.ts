@@ -40,7 +40,7 @@ export const COUPANG_SHIPPING_MARKUP = envInt("COUPANG_SHIPPING_MARKUP", 2000);
 
 /** 마케팅 링크 총 수수료율 (주문관리 1.947% + 판매수수료 0.91%) */
 export const MARKETING_LINK_FEE_RATE = parseFloat(
-  process.env.MARKETING_LINK_FEE_RATE ?? "0.02857"
+  process.env.MARKETING_LINK_FEE_RATE ?? "0.02857",
 );
 
 /** 협찬 고객 배송비 (스토어 설정 기준) */
@@ -53,6 +53,14 @@ export const SPONSOR_SHIPPING_COST = envInt("SPONSOR_SHIPPING_COST", 3300);
 
 /** 브라우저 세션 유효기간 (일) */
 export const SESSION_TTL_DAYS = envInt("SESSION_TTL_DAYS", 30);
+
+// ─── 외부 API 요청 ──────────────────────────────────────────────────────
+
+/**
+ * 외부 API(네이버·쿠팡) 요청 1회당 타임아웃 (ms).
+ * 응답 없이 열려만 있는 연결이 수집 전체를 무한 대기시키는 것을 방지.
+ */
+export const API_REQUEST_TIMEOUT_MS = envInt("API_REQUEST_TIMEOUT_MS", 30_000);
 
 // ─── AI ─────────────────────────────────────────────────────────────────
 
