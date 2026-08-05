@@ -10,13 +10,16 @@ import MatrixSection from "@/components/dashboard/MatrixSection";
 import InsightsSection from "@/components/dashboard/InsightsSection";
 import ScrapeWarningBanner from "@/components/dashboard/ScrapeWarningBanner";
 import VersionHistoryModal from "@/components/dashboard/VersionHistoryModal";
+import { COLLECT_TIMEOUT_MS } from "@/lib/constants";
 
 const THIS_YEAR = new Date().getFullYear();
 const THIS_MONTH = new Date().getMonth() + 1;
 
 export default function MonthlyPage() {
   const [report, setReport] = useState<MonthlyReport | null>(null);
-  const [savedList, setSavedList] = useState<{ year: number; month: number }[]>([]);
+  const [savedList, setSavedList] = useState<{ year: number; month: number }[]>(
+    [],
+  );
   const [selectedYear, setSelectedYear] = useState(THIS_YEAR);
   const [selectedMonth, setSelectedMonth] = useState(THIS_MONTH);
 
@@ -31,6 +34,8 @@ export default function MonthlyPage() {
     fetch("/api/report")
       .then((r) => r.json())
       .then((list: { year: number; month: number }[]) => {
+        // 목록 조회가 에러 객체를 반환한 경우 방어 (savedList는 항상 배열이어야 함)
+        if (!Array.isArray(list)) return;
         setSavedList(list);
         if (list.length > 0) {
           setSelectedYear(list[0].year);
@@ -41,26 +46,43 @@ export default function MonthlyPage() {
   }, []);
 
   // 선택 월 변경 시 레포트 로드
+  //
+  // savedList는 의존성에서 제외한다. 수집 직후 savedList에 새 달이 추가되면
+  // 이 effect가 다시 돌면서 방금 응답으로 받은 레포트를 굳이 재조회했고,
+  // 그 재조회가 끝날 때까지 화면 전체가 "불러오는 중"으로 덮였다.
+  // (재수집은 savedList가 그대로라 재조회가 없어 정상 동작 — 첫 수집만 멈춘 이유)
   useEffect(() => {
-    const exists = savedList.some(
-      (r) => r.year === selectedYear && r.month === selectedMonth
-    );
-    if (!exists) {
-      setReport(null);
-      return;
-    }
+    const controller = new AbortController();
+    let cancelled = false;
 
     setIsLoading(true);
     setError(null);
-    fetch(`/api/report?year=${selectedYear}&month=${selectedMonth}`)
+    fetch(`/api/report?year=${selectedYear}&month=${selectedMonth}`, {
+      signal: controller.signal,
+    })
       .then((r) => {
+        if (r.status === 404) return null; // 아직 수집하지 않은 달
         if (!r.ok) throw new Error("레포트 로드 실패");
         return r.json();
       })
-      .then((data: MonthlyReport) => setReport(data))
-      .catch((e) => setError(e.message))
-      .finally(() => setIsLoading(false));
-  }, [selectedYear, selectedMonth, savedList]);
+      .then((data: MonthlyReport | null) => {
+        if (!cancelled) setReport(data);
+      })
+      .catch((e: unknown) => {
+        if (cancelled || (e instanceof Error && e.name === "AbortError"))
+          return;
+        setError(e instanceof Error ? e.message : "레포트 로드 실패");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    // 월을 빠르게 바꿔도 이전 응답이 뒤늦게 덮어쓰지 않도록 취소
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [selectedYear, selectedMonth]);
 
   // 데이터 수집
   const handleCollect = async () => {
@@ -71,6 +93,7 @@ export default function MonthlyPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ year: selectedYear, month: selectedMonth }),
+        signal: AbortSignal.timeout(COLLECT_TIMEOUT_MS),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -80,13 +103,20 @@ export default function MonthlyPage() {
       setReport(data);
       setSavedList((prev) => {
         const exists = prev.some(
-          (r) => r.year === selectedYear && r.month === selectedMonth
+          (r) => r.year === selectedYear && r.month === selectedMonth,
         );
         if (exists) return prev;
         return [{ year: selectedYear, month: selectedMonth }, ...prev];
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "알 수 없는 오류");
+      if (err instanceof Error && err.name === "TimeoutError") {
+        setError(
+          `수집 응답이 ${COLLECT_TIMEOUT_MS / 60_000}분 안에 오지 않았습니다. ` +
+            `터미널 로그를 확인한 뒤 다시 시도해주세요.`,
+        );
+      } else {
+        setError(err instanceof Error ? err.message : "알 수 없는 오류");
+      }
     } finally {
       setIsCollecting(false);
     }
@@ -112,10 +142,12 @@ export default function MonthlyPage() {
         const updated: MonthlyReport = await res.json();
         setReport(updated);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.");
+        setError(
+          err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.",
+        );
       }
     },
-    [selectedYear, selectedMonth]
+    [selectedYear, selectedMonth],
   );
 
   // AI 인사이트 재생성
@@ -130,12 +162,19 @@ export default function MonthlyPage() {
         const data = await res.json();
         throw new Error(data.error ?? "인사이트 생성 실패");
       }
-      const { insights, insightsGeneratedAt, lastModifiedAt } = await res.json();
+      const { insights, insightsGeneratedAt, lastModifiedAt } =
+        await res.json();
       setReport((prev) =>
-        prev ? { ...prev, insights, insightsGeneratedAt, lastModifiedAt } : prev
+        prev
+          ? { ...prev, insights, insightsGeneratedAt, lastModifiedAt }
+          : prev,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "인사이트 생성 중 오류가 발생했습니다.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "인사이트 생성 중 오류가 발생했습니다.",
+      );
     }
   };
 
@@ -143,13 +182,13 @@ export default function MonthlyPage() {
   const handleRestore = (restored: MonthlyReport) => {
     setReport(restored);
     setRestoreBanner(
-      `${selectedYear}년 ${selectedMonth}월 이전 버전으로 복구되었습니다. 현재 데이터는 백업되었습니다.`
+      `${selectedYear}년 ${selectedMonth}월 이전 버전으로 복구되었습니다. 현재 데이터는 백업되었습니다.`,
     );
     setTimeout(() => setRestoreBanner(null), 8000);
   };
 
   const hasSaved = savedList.some(
-    (r) => r.year === selectedYear && r.month === selectedMonth
+    (r) => r.year === selectedYear && r.month === selectedMonth,
   );
 
   return (
@@ -269,7 +308,14 @@ export default function MonthlyPage() {
           />
 
           <SponsorshipCard
-            sponsorship={report.sponsorship ?? { items: [], marketingCost: 0, totalQuantity: 0, handmadeQuantity: 0 }}
+            sponsorship={
+              report.sponsorship ?? {
+                items: [],
+                marketingCost: 0,
+                totalQuantity: 0,
+                handmadeQuantity: 0,
+              }
+            }
             productMatrix={report.productMatrix}
             onUpdate={handleUpdate}
           />

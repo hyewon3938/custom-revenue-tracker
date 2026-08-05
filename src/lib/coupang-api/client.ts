@@ -1,4 +1,5 @@
 import { generateHmacSignature } from "./auth";
+import { API_REQUEST_TIMEOUT_MS } from "@/lib/config";
 
 const MAX_RETRIES = 3;
 
@@ -6,17 +7,18 @@ const MAX_RETRIES = 3;
  * 쿠팡 Wing API 요청 래퍼
  * - HMAC-SHA256 인증 자동 포함
  * - 실패 시 3회 재시도 (지수 백오프)
+ * - 시도마다 타임아웃 적용 (응답 없는 연결로 수집이 멈추는 것 방지)
  */
 export async function coupangApi<T>(
   path: string,
-  options: { method?: string; params?: Record<string, string> } = {}
+  options: { method?: string; params?: Record<string, string> } = {},
 ): Promise<T> {
   const { method = "GET", params } = options;
   const accessKey = process.env.COUPANG_ACCESS_KEY;
   const secretKey = process.env.COUPANG_SECRET_KEY;
   if (!accessKey || !secretKey) {
     throw new Error(
-      "COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY 환경변수가 필요합니다."
+      "COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY 환경변수가 필요합니다.",
     );
   }
 
@@ -29,7 +31,10 @@ export async function coupangApi<T>(
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const { authorization, url } = generateHmacSignature(
-        method, fullPath, secretKey, accessKey
+        method,
+        fullPath,
+        secretKey,
+        accessKey,
       );
 
       const response = await fetch(url, {
@@ -38,6 +43,7 @@ export async function coupangApi<T>(
           Authorization: authorization,
           "Content-Type": "application/json",
         },
+        signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -47,7 +53,14 @@ export async function coupangApi<T>(
 
       return (await response.json()) as T;
     } catch (error) {
-      if (attempt === MAX_RETRIES) throw error;
+      if (attempt === MAX_RETRIES) {
+        if (error instanceof Error && error.name === "TimeoutError") {
+          throw new Error(
+            `쿠팡 API 응답 없음 (${API_REQUEST_TIMEOUT_MS}ms 초과, ${MAX_RETRIES}회 시도)`,
+          );
+        }
+        throw error;
+      }
       await new Promise((r) => setTimeout(r, 1000 * attempt));
     }
   }

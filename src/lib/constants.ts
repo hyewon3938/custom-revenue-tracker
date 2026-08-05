@@ -20,3 +20,10 @@ export const DEFAULT_SPONSORSHIP: SponsorshipData = {
   totalQuantity: 0,
   handmadeQuantity: 0,
 };
+
+/**
+ * 수집 요청(POST /api/scrape) 클라이언트 타임아웃 (ms).
+ * 수동 로그인 대기(최대 5분) + 스크레이핑 시간을 감안한 상한.
+ * 서버가 끝내 응답하지 않아도 버튼이 "수집 중"에 갇히지 않도록 한다.
+ */
+export const COLLECT_TIMEOUT_MS = 15 * 60 * 1_000;
