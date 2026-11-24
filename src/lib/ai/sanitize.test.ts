@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { sanitizeText } from "./insights";
+import { sanitizeText } from "./sanitize";
 
 describe("sanitizeText", () => {
   test("3글자 한자 패턴을 한글로 치환한다", () => {
