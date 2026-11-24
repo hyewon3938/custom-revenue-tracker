@@ -1,5 +1,3 @@
-"use client";
-
 import { ScrapeWarning } from "@/lib/types";
 
 interface Props {

@@ -1,5 +1,3 @@
-"use client";
-
 import EditableField from "@/components/dashboard/EditableField";
 
 interface EditRowProps {

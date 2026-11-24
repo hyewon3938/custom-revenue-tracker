@@ -14,11 +14,17 @@ import {
 import { MonthlyOverview } from "@/lib/types";
 import { formatKRW } from "@/lib/utils/format";
 import {
+  CHART_HEIGHT,
   CHART_MARGIN,
   GRID_PROPS,
   X_TICK,
   Y_TICK,
+  MONEY_AXIS_WIDTH,
   LABEL_STYLE,
+  LABEL_FILL,
+  MAN_WON,
+  formatManWon,
+  formatKRWTooltip,
 } from "./chart-config";
 
 interface Props {
@@ -33,23 +39,16 @@ export default function MarketingCostChart({ data }: Props) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
       <BarChart data={chartData} margin={CHART_MARGIN}>
         <CartesianGrid {...GRID_PROPS} />
         <XAxis dataKey="label" tick={X_TICK} />
         <YAxis
-          tickFormatter={(v) =>
-            v >= 10000 ? `${Math.round(v / 10000)}만` : `${v}`
-          }
+          tickFormatter={(v) => (v >= MAN_WON ? formatManWon(v) : `${v}`)}
           tick={Y_TICK}
-          width={52}
+          width={MONEY_AXIS_WIDTH}
         />
-        <Tooltip
-          formatter={(value: number | undefined, name: string | undefined) => [
-            formatKRW(value ?? 0),
-            name ?? "",
-          ]}
-        />
+        <Tooltip formatter={formatKRWTooltip} />
         <Legend />
         <Bar
           dataKey="naverAdFee"
@@ -78,11 +77,9 @@ export default function MarketingCostChart({ data }: Props) {
             formatter={(v: unknown) => {
               const val = (v as number) ?? 0;
               if (val === 0) return "";
-              return val >= 10000
-                ? `${Math.round(val / 10000)}만`
-                : formatKRW(val);
+              return val >= MAN_WON ? formatManWon(val) : formatKRW(val);
             }}
-            style={{ ...LABEL_STYLE, fill: "#374151" }}
+            style={{ ...LABEL_STYLE, fill: LABEL_FILL }}
           />
         </Bar>
       </BarChart>

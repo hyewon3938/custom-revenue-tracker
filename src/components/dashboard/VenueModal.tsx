@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { VenueInfo, OfflineData } from "@/lib/types";
-
-interface VenueRegistry {
-  venues: VenueInfo[];
-  lastModifiedAt: string;
-}
+import Modal from "@/components/ui/Modal";
+import { useVenueRegistry } from "@/hooks/useVenueRegistry";
 
 interface Props {
   isOpen: boolean;
@@ -135,19 +132,11 @@ export default function VenueModal({
   month,
   onUpdate,
 }: Props) {
-  const [registry, setRegistry] = useState<VenueRegistry | null>(null);
+  const { registry, refresh, createVenue, renameVenue, deleteVenue } =
+    useVenueRegistry(isOpen);
   const [newName, setNewName] = useState("");
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
   const newInputRef = useRef<HTMLInputElement>(null);
-
-  const fetchRegistry = useCallback(async () => {
-    const res = await fetch("/api/venues");
-    if (res.ok) setRegistry(await res.json());
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) fetchRegistry();
-  }, [isOpen, fetchRegistry]);
 
   if (!isOpen || !registry) return null;
 
@@ -173,25 +162,17 @@ export default function VenueModal({
   const handleAdd = async () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    const res = await fetch("/api/venues", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
-    });
-    if (res.ok) {
+    const isCreated = await createVenue(trimmed);
+    if (isCreated) {
       setNewName("");
-      await fetchRegistry();
+      await refresh();
       newInputRef.current?.focus();
     }
   };
 
   const handleRename = async (id: string, newVenueName: string) => {
-    await fetch("/api/venues", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, name: newVenueName }),
-    });
-    await fetchRegistry();
+    await renameVenue(id, newVenueName);
+    await refresh();
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -200,86 +181,65 @@ export default function VenueModal({
     if (activeIds.has(id)) {
       await onUpdate({ removeOfflineVenueId: id });
     }
-    await fetch("/api/venues", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    await fetchRegistry();
+    await deleteVenue(id);
+    await refresh();
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <Modal
+      title="오프라인 입점처 관리"
+      subtitle={
+        <>
+          {year}년 {month}월 기준
+        </>
+      }
+      onClose={onClose}
     >
-      <div className="bg-white rounded-xl border border-warm-200 shadow-lg w-full max-w-md mx-4">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900">
-              오프라인 입점처 관리
-            </h3>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {year}년 {month}월 기준
-            </p>
+      {/* 입점처 리스트 */}
+      <div className="px-5 max-h-64 overflow-y-auto">
+        {registry.venues.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4 text-center">
+            등록된 입점처가 없습니다.
+          </p>
+        ) : (
+          <div className="divide-y divide-warm-100">
+            {registry.venues.map((venue) => (
+              <VenueRow
+                key={venue.id}
+                venue={venue}
+                isActive={activeIds.has(venue.id)}
+                isToggling={togglingIds.has(venue.id)}
+                onToggle={() => handleToggle(venue)}
+                onRename={(name) => handleRename(venue.id, name)}
+                onDelete={() => handleDelete(venue.id, venue.name)}
+              />
+            ))}
           </div>
+        )}
+      </div>
+
+      {/* 입점처 추가 */}
+      <div className="px-5 pb-5 pt-3 border-t border-warm-100 mt-2">
+        <div className="flex gap-2">
+          <input
+            ref={newInputRef}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleAdd();
+            }}
+            placeholder="새 입점처 이름"
+            className="flex-1 text-sm border border-warm-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-300"
+          />
           <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-lg leading-none px-1"
+            onClick={handleAdd}
+            disabled={!newName.trim()}
+            className="px-4 py-2 text-sm font-medium bg-brand-500 text-white rounded-lg hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            &times;
+            추가
           </button>
         </div>
-
-        {/* 입점처 리스트 */}
-        <div className="px-5 max-h-64 overflow-y-auto">
-          {registry.venues.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">
-              등록된 입점처가 없습니다.
-            </p>
-          ) : (
-            <div className="divide-y divide-warm-100">
-              {registry.venues.map((venue) => (
-                <VenueRow
-                  key={venue.id}
-                  venue={venue}
-                  isActive={activeIds.has(venue.id)}
-                  isToggling={togglingIds.has(venue.id)}
-                  onToggle={() => handleToggle(venue)}
-                  onRename={(name) => handleRename(venue.id, name)}
-                  onDelete={() => handleDelete(venue.id, venue.name)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 입점처 추가 */}
-        <div className="px-5 pb-5 pt-3 border-t border-warm-100 mt-2">
-          <div className="flex gap-2">
-            <input
-              ref={newInputRef}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleAdd();
-              }}
-              placeholder="새 입점처 이름"
-              className="flex-1 text-sm border border-warm-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-300"
-            />
-            <button
-              onClick={handleAdd}
-              disabled={!newName.trim()}
-              className="px-4 py-2 text-sm font-medium bg-brand-500 text-white rounded-lg hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              추가
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

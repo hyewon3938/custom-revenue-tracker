@@ -12,13 +12,17 @@ import {
   LabelList,
 } from "recharts";
 import { MonthlyOverview } from "@/lib/types";
-import { formatKRW } from "@/lib/utils/format";
 import {
+  CHART_HEIGHT,
   CHART_MARGIN,
   GRID_PROPS,
   X_TICK,
   Y_TICK,
+  MONEY_AXIS_WIDTH,
   LABEL_STYLE,
+  LABEL_FILL,
+  formatManWon,
+  formatKRWTooltip,
 } from "./chart-config";
 
 interface Props {
@@ -27,21 +31,16 @@ interface Props {
 
 export default function RevenueChart({ data }: Props) {
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
       <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid {...GRID_PROPS} />
         <XAxis dataKey="label" tick={X_TICK} />
         <YAxis
-          tickFormatter={(v) => `${Math.round(v / 10000)}만`}
+          tickFormatter={(v) => formatManWon(v)}
           tick={Y_TICK}
-          width={52}
+          width={MONEY_AXIS_WIDTH}
         />
-        <Tooltip
-          formatter={(value: number | undefined, name: string | undefined) => [
-            formatKRW(value ?? 0),
-            name ?? "",
-          ]}
-        />
+        <Tooltip formatter={formatKRWTooltip} />
         <Legend />
         <Bar
           dataKey="naverRevenue"
@@ -68,10 +67,8 @@ export default function RevenueChart({ data }: Props) {
           <LabelList
             dataKey="totalRevenue"
             position="top"
-            formatter={(v: unknown) =>
-              `${Math.round(((v as number) ?? 0) / 10000)}만`
-            }
-            style={{ ...LABEL_STYLE, fill: "#374151" }}
+            formatter={(v: unknown) => formatManWon((v as number) ?? 0)}
+            style={{ ...LABEL_STYLE, fill: LABEL_FILL }}
           />
         </Bar>
       </BarChart>

@@ -1,18 +1,23 @@
 import { ProductMatrixRow, SponsoredItem } from "@/lib/types";
 import Card from "@/components/ui/Card";
 
+/** 협찬 열 글자색 */
+const SPONSOR_COLUMN_STYLE = { color: "#2663EB" } as const;
+
 interface Props {
   matrix: ProductMatrixRow[];
   sponsoredItems?: SponsoredItem[];
 }
 
 export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
-  const sponsoredMap = new Map(sponsoredItems.map((i) => [i.productName, i.quantity]));
+  const sponsoredMap = new Map(
+    sponsoredItems.map((i) => [i.productName, i.quantity]),
+  );
   const hasSponsorship = sponsoredItems.length > 0;
 
   // 판매량이 있거나 협찬 수량이 있는 행만 표시
   const visibleRows = matrix.filter(
-    (row) => row.total > 0 || (sponsoredMap.get(row.productName) ?? 0) > 0
+    (row) => row.total > 0 || (sponsoredMap.get(row.productName) ?? 0) > 0,
   );
 
   if (visibleRows.length === 0) return null;
@@ -39,7 +44,10 @@ export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
                 오프라인
               </th>
               {hasSponsorship && (
-                <th className="text-right px-4 py-3 font-medium" style={{ color: "#2663EB" }}>
+                <th
+                  className="text-right px-4 py-3 font-medium"
+                  style={SPONSOR_COLUMN_STYLE}
+                >
                   협찬
                 </th>
               )}
@@ -59,21 +67,42 @@ export default function MatrixSection({ matrix, sponsoredItems = [] }: Props) {
                   <td className="px-4 py-2.5">
                     <span className="text-gray-800">{row.productName}</span>
                     {row.category === "handmade" && (
-                      <span className="ml-2 text-xs text-brand-400">끈갈피</span>
+                      <span className="ml-2 text-xs text-brand-400">
+                        끈갈피
+                      </span>
                     )}
                   </td>
                   <td className="text-right px-4 py-2.5 text-gray-600">
-                    {row.naver > 0 ? row.naver : <span className="text-gray-200">—</span>}
+                    {row.naver > 0 ? (
+                      row.naver
+                    ) : (
+                      <span className="text-gray-200">—</span>
+                    )}
                   </td>
                   <td className="text-right px-4 py-2.5 text-gray-600">
-                    {row.coupang > 0 ? row.coupang : <span className="text-gray-200">—</span>}
+                    {row.coupang > 0 ? (
+                      row.coupang
+                    ) : (
+                      <span className="text-gray-200">—</span>
+                    )}
                   </td>
                   <td className="text-right px-4 py-2.5 text-gray-600">
-                    {row.offline > 0 ? row.offline : <span className="text-gray-200">—</span>}
+                    {row.offline > 0 ? (
+                      row.offline
+                    ) : (
+                      <span className="text-gray-200">—</span>
+                    )}
                   </td>
                   {hasSponsorship && (
-                    <td className="text-right px-4 py-2.5" style={{ color: "#2663EB" }}>
-                      {sponsored > 0 ? sponsored : <span className="text-gray-200">—</span>}
+                    <td
+                      className="text-right px-4 py-2.5"
+                      style={SPONSOR_COLUMN_STYLE}
+                    >
+                      {sponsored > 0 ? (
+                        sponsored
+                      ) : (
+                        <span className="text-gray-200">—</span>
+                      )}
                     </td>
                   )}
                   <td className="text-right px-4 py-2.5 font-semibold text-gray-900">
