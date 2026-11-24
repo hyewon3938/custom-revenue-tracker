@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { pad } from "@/lib/utils/format";
 
 const API_GATEWAY = "https://api-gateway.coupang.com";
 
@@ -19,15 +20,14 @@ export function generateHmacSignature(
 
   // yyMMddTHHmmssZ (GMT)
   const now = new Date();
-  const pad2 = (n: number) => String(n).padStart(2, "0");
   const datetime =
     String(now.getUTCFullYear()).slice(2) +
-    pad2(now.getUTCMonth() + 1) +
-    pad2(now.getUTCDate()) +
+    pad(now.getUTCMonth() + 1) +
+    pad(now.getUTCDate()) +
     "T" +
-    pad2(now.getUTCHours()) +
-    pad2(now.getUTCMinutes()) +
-    pad2(now.getUTCSeconds()) +
+    pad(now.getUTCHours()) +
+    pad(now.getUTCMinutes()) +
+    pad(now.getUTCSeconds()) +
     "Z";
 
   const message = `${datetime}${method.toUpperCase()}${pathname}${query}`;

@@ -3,7 +3,12 @@
  * 동일 브라우저 세션 안에서 최대 1회 재시도 (총 2회 실행).
  */
 
-export interface RetryResult<T> {
+import { getErrorMessage } from "@/lib/utils/error";
+
+/** 재시도 전 기본 대기 시간 (ms) */
+const DEFAULT_RETRY_DELAY_MS = 3_000;
+
+interface RetryResult<T> {
   data: T;
   /** 재시도 포함 최종 실패 여부 */
   failed: boolean;
@@ -26,14 +31,14 @@ export async function withRetry<T>(
   name: string,
   fn: () => Promise<T>,
   fallback: T,
-  delayMs = 3_000
+  delayMs = DEFAULT_RETRY_DELAY_MS
 ): Promise<RetryResult<T>> {
   // 1차 시도
   try {
     const data = await fn();
     return { data, failed: false, retried: false };
   } catch (err1) {
-    const firstMsg = err1 instanceof Error ? err1.message : String(err1);
+    const firstMsg = getErrorMessage(err1, String(err1));
     console.warn(`[${name}] 첫 번째 시도 실패: ${firstMsg}. ${delayMs}ms 후 재시도...`);
 
     await new Promise((r) => setTimeout(r, delayMs));
@@ -44,7 +49,7 @@ export async function withRetry<T>(
       console.log(`[${name}] 재시도 성공`);
       return { data, failed: false, retried: true };
     } catch (err2) {
-      const finalMsg = err2 instanceof Error ? err2.message : String(err2);
+      const finalMsg = getErrorMessage(err2, String(err2));
       console.error(`[${name}] 재시도도 실패: ${finalMsg}`);
       return { data: fallback, failed: true, retried: true, error: finalMsg };
     }

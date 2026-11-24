@@ -1,7 +1,6 @@
 import { generateHmacSignature } from "./auth";
-import { API_REQUEST_TIMEOUT_MS } from "@/lib/config";
-
-const MAX_RETRIES = 3;
+import { getCoupangApiCredentials } from "@/lib/config";
+import { fetchJsonWithRetry } from "@/lib/utils/fetch-with-retry";
 
 /**
  * 쿠팡 Wing API 요청 래퍼
@@ -14,8 +13,7 @@ export async function coupangApi<T>(
   options: { method?: string; params?: Record<string, string> } = {},
 ): Promise<T> {
   const { method = "GET", params } = options;
-  const accessKey = process.env.COUPANG_ACCESS_KEY;
-  const secretKey = process.env.COUPANG_SECRET_KEY;
+  const { accessKey, secretKey } = getCoupangApiCredentials();
   if (!accessKey || !secretKey) {
     throw new Error(
       "COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY 환경변수가 필요합니다.",
@@ -28,8 +26,10 @@ export async function coupangApi<T>(
     fullPath += `?${qs}`;
   }
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
+  return fetchJsonWithRetry<T>({
+    label: "쿠팡",
+    // 서명에 시각이 들어가므로 시도마다 다시 만든다
+    buildRequest: () => {
       const { authorization, url } = generateHmacSignature(
         method,
         fullPath,
@@ -37,33 +37,16 @@ export async function coupangApi<T>(
         accessKey,
       );
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          Authorization: authorization,
-          "Content-Type": "application/json",
+      return {
+        url,
+        init: {
+          method,
+          headers: {
+            Authorization: authorization,
+            "Content-Type": "application/json",
+          },
         },
-        signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`쿠팡 API 에러 (${response.status}): ${text}`);
-      }
-
-      return (await response.json()) as T;
-    } catch (error) {
-      if (attempt === MAX_RETRIES) {
-        if (error instanceof Error && error.name === "TimeoutError") {
-          throw new Error(
-            `쿠팡 API 응답 없음 (${API_REQUEST_TIMEOUT_MS}ms 초과, ${MAX_RETRIES}회 시도)`,
-          );
-        }
-        throw error;
-      }
-      await new Promise((r) => setTimeout(r, 1000 * attempt));
-    }
-  }
-
-  throw new Error("unreachable");
+      };
+    },
+  });
 }

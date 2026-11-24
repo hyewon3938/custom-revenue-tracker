@@ -1,21 +1,20 @@
+import { NaverData, PlatformFees, ScrapeWarning } from "@/lib/types";
 import {
-  NaverData,
-  PlatformFees,
-  ProductSales,
-  ScrapeWarning,
-} from "@/lib/types";
-import { detectCategory } from "@/lib/calculations/product";
+  aggregateProductSales,
+  summarizeQuantities,
+} from "@/lib/calculations/quantity";
 import {
   calcPlatformProfit,
   calcNaverShippingStats,
   naverMaterialBase,
 } from "@/lib/calculations/profit";
+import { getErrorMessage } from "@/lib/utils/error";
 import { getOrders, filterValidOrders } from "./orders";
 import { getSettlements } from "./settlement";
 
 /**
  * 네이버 커머스 API로 월간 데이터 수집.
- * 기존 Playwright 스크레이퍼 3개(sales, orders, settlement)를 대체.
+ * 브라우저 없이 API 두 개로 네이버 쪽 수집을 모두 처리한다.
  *
  * 1. Orders API → 매출, 결제자수, 배송비, 제품별 판매수량
  * 2. Settlement API → 정산금, 수수료
@@ -50,27 +49,16 @@ export async function collectNaverDataViaApi(
   const payerCount = orderShippingMap.size;
 
   // 제품별 판매수량 집계
-  const productMap = new Map<string, ProductSales>();
-  for (const order of validOrders) {
-    const key = resolveProductKey(order.productName, order.productOption);
-    const existing = productMap.get(key);
-    if (existing) {
-      existing.quantity += order.quantity;
-    } else {
-      productMap.set(key, {
-        productName: key,
-        category: detectCategory(key),
-        platform: "naver",
-        quantity: order.quantity,
-      });
-    }
-  }
-  const products = Array.from(productMap.values());
+  const products = aggregateProductSales(
+    validOrders.map((order) => ({
+      productName: resolveProductKey(order.productName, order.productOption),
+      quantity: order.quantity,
+    })),
+    "naver",
+  );
 
-  const handmadeQuantity = products
-    .filter((p) => p.category === "handmade")
-    .reduce((s, p) => s + p.quantity, 0);
-  const totalQuantity = products.reduce((s, p) => s + p.quantity, 0);
+  const { totalQuantity, handmadeQuantity, otherQuantity } =
+    summarizeQuantities(products);
 
   // ─── 2. 정산 데이터 ────────────────────────────────────────────────
   let settlementAmount = 0;
@@ -84,7 +72,7 @@ export async function collectNaverDataViaApi(
       settlements.reduce((sum, s) => sum + s.commissionSettleAmount, 0),
     );
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error, String(error));
     warnings.push({
       level: "error",
       message: `네이버 정산 API 호출 실패: ${msg}`,
@@ -108,7 +96,7 @@ export async function collectNaverDataViaApi(
       payerCount,
       totalQuantity,
       handmadeQuantity,
-      otherQuantity: totalQuantity - handmadeQuantity,
+      otherQuantity,
       fees,
       shippingStats,
       profit: calcPlatformProfit(
