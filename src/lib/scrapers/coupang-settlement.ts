@@ -1,6 +1,6 @@
 import { Page } from "playwright";
-import { COUPANG_URLS, pad } from "./coupang-auth";
-import { calcEndDay } from "@/lib/utils/format";
+import { COUPANG_URLS } from "./coupang-auth";
+import { calcEndDay, pad } from "@/lib/utils/format";
 
 export interface CoupangSettlementResult {
   revenue: number;       // 매출

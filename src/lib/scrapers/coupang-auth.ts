@@ -1,15 +1,9 @@
 import { Page, BrowserContext } from "playwright";
 import { saveSession } from "./session-store";
 
-export const COUPANG_BASE = "https://wing.coupang.com";
-
-// pad는 @/lib/utils/format에서 re-export (기존 import 경로 유지)
-export { pad } from "@/lib/utils/format";
+const COUPANG_BASE = "https://wing.coupang.com";
 
 export const COUPANG_URLS = {
-  home: COUPANG_BASE,
-  // 쿠팡 판매분석
-  salesAnalysis: `${COUPANG_BASE}/tenants/business-insight/sales-analysis`,
   // 쿠팡 로켓그로스 정산
   settlement: `${COUPANG_BASE}/tenants/rfm/settlements/home`,
 } as const;
