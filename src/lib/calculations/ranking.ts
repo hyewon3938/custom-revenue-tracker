@@ -11,8 +11,72 @@ import {
   SponsoredItem,
   SponsorshipData,
 } from "@/lib/types";
+import { OVERALL_RANKING_SIZE, PLATFORM_RANKING_SIZE } from "@/lib/constants";
 import { toCanonical } from "./product";
 import { calcOverallSummary } from "./profit";
+
+// ─── canonical명 기준 플랫폼별 수량 집계 (통합 랭킹·매트릭스 공용) ────────
+
+/** canonical 상품 1건의 카테고리와 플랫폼별 수량 */
+interface CanonicalQuantities {
+  category: ProductCategory;
+  naver: number;
+  coupang: number;
+  offline: number;
+}
+
+/** canonical명 → 수량. Map 삽입 순서(= 처음 나온 순서)가 동률 정렬 순서를 결정한다. */
+type CanonicalQuantityMap = Map<string, CanonicalQuantities>;
+
+/**
+ * 한 플랫폼의 상품 목록을 canonical명 기준으로 map에 더한다 (map을 직접 변경).
+ * 카테고리는 처음 나온 상품의 값을 쓰고, correctCategory가 true면
+ * 수량이 0보다 큰 행이 나올 때마다 그 행의 카테고리로 덮어쓴다.
+ */
+function addPlatformProducts(
+  map: CanonicalQuantityMap,
+  products: ProductSales[],
+  platform: Platform,
+  mapping: ProductMappingConfig | null,
+  correctCategory: boolean
+): void {
+  for (const p of products) {
+    const key = toCanonical(p.productName, platform, mapping);
+    let entry = map.get(key);
+    if (!entry) {
+      entry = { category: p.category, naver: 0, coupang: 0, offline: 0 };
+      map.set(key, entry);
+    }
+    entry[platform] += p.quantity;
+    if (correctCategory && p.quantity > 0) entry.category = p.category;
+  }
+}
+
+/** 네이버 → 쿠팡 → 오프라인 순서로 세 플랫폼을 map에 합산한다. */
+function aggregateByCanonical(
+  naver: ProductSales[],
+  coupang: ProductSales[],
+  offline: ProductSales[],
+  mapping: ProductMappingConfig | null,
+  map: CanonicalQuantityMap = new Map(),
+  correctCategory: boolean = false
+): CanonicalQuantityMap {
+  addPlatformProducts(map, naver, "naver", mapping, correctCategory);
+  addPlatformProducts(map, coupang, "coupang", mapping, correctCategory);
+  addPlatformProducts(map, offline, "offline", mapping, correctCategory);
+  return map;
+}
+
+/** total 내림차순 정렬 → 상위 N개 → rank 1부터 부여 */
+function rankByTotal(
+  entries: ProductRankEntry[],
+  topN: number
+): ProductRankEntry[] {
+  return entries
+    .sort((a, b) => b.total - a.total)
+    .slice(0, topN)
+    .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+}
 
 // ─── 랭킹 계산 ────────────────────────────────────────────────────────────
 
@@ -65,29 +129,10 @@ export function calcOverallRanking(
   mapping: ProductMappingConfig | null,
   topN: number
 ): ProductRankEntry[] {
-  const map = new Map<
-    string,
-    { category: ProductCategory; naver: number; coupang: number; offline: number }
-  >();
+  const map = aggregateByCanonical(naver, coupang, offline, mapping);
 
-  const add = (products: ProductSales[], platform: Platform) => {
-    for (const p of products) {
-      const key = toCanonical(p.productName, platform, mapping);
-      const existing = map.get(key);
-      if (!existing) {
-        map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
-      }
-      const entry = map.get(key)!;
-      entry[platform] += p.quantity;
-    }
-  };
-
-  add(naver, "naver");
-  add(coupang, "coupang");
-  add(offline, "offline");
-
-  return Array.from(map.entries())
-    .map(([name, v]) => ({
+  return rankByTotal(
+    Array.from(map.entries()).map(([name, v]) => ({
       rank: 0,
       productName: name,
       category: v.category,
@@ -95,10 +140,9 @@ export function calcOverallRanking(
       naver: v.naver,
       coupang: v.coupang,
       offline: v.offline,
-    }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, topN)
-    .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+    })),
+    topN
+  );
 }
 
 // ─── 협찬 제외 랭킹 ───────────────────────────────────────────────────────
@@ -115,48 +159,32 @@ export function calcSponsorExcludedRanking(
   mapping: ProductMappingConfig | null,
   topN: number
 ): ProductRankEntry[] {
-  const map = new Map<
-    string,
-    { category: ProductCategory; naver: number; coupang: number; offline: number }
-  >();
-
-  const add = (products: ProductSales[], platform: Platform) => {
-    for (const p of products) {
-      const key = toCanonical(p.productName, platform, mapping);
-      if (!map.has(key)) {
-        map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
-      }
-      const entry = map.get(key)!;
-      entry[platform] += p.quantity;
-    }
-  };
-
-  add(naver, "naver");
-  add(coupang, "coupang");
-  add(offline, "offline");
+  const map = aggregateByCanonical(naver, coupang, offline, mapping);
 
   // 협찬 수량 차감 (canonical명 기준, 0 미만 클램프)
-  const sponsoredMap = new Map(sponsoredItems.map((i) => [i.productName, i.quantity]));
+  const sponsoredMap = new Map(
+    sponsoredItems.map((i) => [i.productName, i.quantity])
+  );
 
-  return Array.from(map.entries())
-    .map(([name, v]) => {
-      const sponsored = sponsoredMap.get(name) ?? 0;
-      const rawTotal = v.naver + v.coupang + v.offline;
-      const adjustedTotal = Math.max(0, rawTotal - sponsored);
-      return {
-        rank: 0,
-        productName: name,
-        category: v.category,
-        total: adjustedTotal,
-        naver: v.naver,
-        coupang: v.coupang,
-        offline: v.offline,
-      };
-    })
-    .filter((e) => e.total > 0)
-    .sort((a, b) => b.total - a.total)
-    .slice(0, topN)
-    .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+  return rankByTotal(
+    Array.from(map.entries())
+      .map(([name, v]) => {
+        const sponsored = sponsoredMap.get(name) ?? 0;
+        const rawTotal = v.naver + v.coupang + v.offline;
+        const adjustedTotal = Math.max(0, rawTotal - sponsored);
+        return {
+          rank: 0,
+          productName: name,
+          category: v.category,
+          total: adjustedTotal,
+          naver: v.naver,
+          coupang: v.coupang,
+          offline: v.offline,
+        };
+      })
+      .filter((e) => e.total > 0),
+    topN
+  );
 }
 
 // ─── 상품 × 플랫폼 매트릭스 ───────────────────────────────────────────────
@@ -167,37 +195,25 @@ export function calcProductMatrix(
   offline: ProductSales[],
   mapping: ProductMappingConfig | null
 ): ProductMatrixRow[] {
-  const map = new Map<
-    string,
-    { category: ProductCategory; naver: number; coupang: number; offline: number }
-  >();
+  const map: CanonicalQuantityMap = new Map();
 
   // 매핑에 등록된 canonical명 전체를 0으로 초기 세팅
   // → 이번 달 판매 없는 상품도 리스트·오프라인 입력란에 표시됨
   if (mapping) {
     for (const m of mapping.mappings) {
       if (!map.has(m.canonical)) {
-        map.set(m.canonical, { category: "handmade", naver: 0, coupang: 0, offline: 0 });
+        map.set(m.canonical, {
+          category: "handmade",
+          naver: 0,
+          coupang: 0,
+          offline: 0,
+        });
       }
     }
   }
 
-  const add = (products: ProductSales[], platform: Platform) => {
-    for (const p of products) {
-      const key = toCanonical(p.productName, platform, mapping);
-      if (!map.has(key)) {
-        map.set(key, { category: p.category, naver: 0, coupang: 0, offline: 0 });
-      }
-      const entry = map.get(key)!;
-      entry[platform] += p.quantity;
-      // 실제 판매 데이터로 카테고리 보정
-      if (p.quantity > 0) entry.category = p.category;
-    }
-  };
-
-  add(naver, "naver");
-  add(coupang, "coupang");
-  add(offline, "offline");
+  // 실제 판매 데이터(수량 > 0)로 카테고리 보정
+  aggregateByCanonical(naver, coupang, offline, mapping, map, true);
 
   return Array.from(map.entries())
     .map(([name, v]) => ({
@@ -226,19 +242,47 @@ export function rebuildDerivedFields(
 ) {
   const allOfflineProducts = offline.flatMap((v) => v.products);
 
-  const summary = calcOverallSummary(naver, coupang, offline, sponsorship.marketingCost);
-  const naverRanking = calcPlatformRanking(naver.products, 3, mapping);
-  const coupangRanking = calcPlatformRanking(coupang.products, 3, mapping);
-  const offlineRanking = calcPlatformRanking(allOfflineProducts, 3, mapping);
+  const summary = calcOverallSummary(
+    naver,
+    coupang,
+    offline,
+    sponsorship.marketingCost
+  );
+  const naverRanking = calcPlatformRanking(
+    naver.products,
+    PLATFORM_RANKING_SIZE,
+    mapping
+  );
+  const coupangRanking = calcPlatformRanking(
+    coupang.products,
+    PLATFORM_RANKING_SIZE,
+    mapping
+  );
+  const offlineRanking = calcPlatformRanking(
+    allOfflineProducts,
+    PLATFORM_RANKING_SIZE,
+    mapping
+  );
   const overallRanking = calcOverallRanking(
-    naver.products, coupang.products, allOfflineProducts, mapping, 5
+    naver.products,
+    coupang.products,
+    allOfflineProducts,
+    mapping,
+    OVERALL_RANKING_SIZE
   );
   const sponsorExcludedRanking = calcSponsorExcludedRanking(
-    naver.products, coupang.products, allOfflineProducts,
-    sponsorship.items, mapping, 5
+    naver.products,
+    coupang.products,
+    allOfflineProducts,
+    sponsorship.items,
+    mapping,
+    OVERALL_RANKING_SIZE
   );
   const productMatrix = calcProductMatrix(
-    naver.products, coupang.products, allOfflineProducts, mapping
+    naver.products,
+    coupang.products,
+    allOfflineProducts,
+    mapping
   );
 
   return {
