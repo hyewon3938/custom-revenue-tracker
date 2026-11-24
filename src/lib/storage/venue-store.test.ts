@@ -6,7 +6,14 @@ vi.mock("fs/promises", async () =>
   (await import("./test-utils/memory-fs")).createFsMock(),
 );
 
-import { loadVenues, addVenue, renameVenue, deleteVenue } from "./venue-store";
+import type { VenueInfo } from "@/lib/types";
+import {
+  loadVenues,
+  addVenue,
+  renameVenue,
+  deleteVenue,
+  generateId,
+} from "./venue-store";
 
 const VENUE_PATH = path.join(process.cwd(), "data", "venues.json");
 
@@ -71,5 +78,33 @@ describe("renameVenue / deleteVenue", () => {
     await expect(deleteVenue("none")).rejects.toThrow(
       "입점처 'none'를 찾을 수 없습니다.",
     );
+  });
+});
+
+describe("generateId", () => {
+  const venues = (...ids: string[]): VenueInfo[] =>
+    ids.map((id) => ({ id, name: id, createdAt: "2025-01-01T00:00:00.000Z" }));
+
+  it("영문은 소문자로, 한글·숫자는 그대로 둔다", () => {
+    expect(generateId("BookCafe", [])).toBe("bookcafe");
+    expect(generateId("책방2호점", [])).toBe("책방2호점");
+  });
+
+  it("그 밖의 문자는 하이픈으로 바꾸고 연속·양끝 하이픈을 정리한다", () => {
+    expect(generateId("  Book   Cafe & 서점!! ", [])).toBe("book-cafe-서점");
+    expect(generateId("a_b.c", [])).toBe("a-b-c");
+  });
+
+  it("쓸 수 있는 문자가 없으면 venue", () => {
+    expect(generateId("", [])).toBe("venue");
+    expect(generateId("!!!", [])).toBe("venue");
+    expect(generateId("ㄱㄴㄷ", [])).toBe("venue");
+  });
+
+  it("겹치면 비어 있는 가장 작은 번호(2부터)를 붙인다", () => {
+    expect(generateId("gosan", venues("gosan"))).toBe("gosan-2");
+    expect(generateId("gosan", venues("gosan", "gosan-2"))).toBe("gosan-3");
+    expect(generateId("gosan", venues("gosan", "gosan-3"))).toBe("gosan-2");
+    expect(generateId("gosan", venues("gosan-2"))).toBe("gosan");
   });
 });
