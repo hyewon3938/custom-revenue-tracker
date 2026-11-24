@@ -12,8 +12,12 @@ import {
 import { rebuildDerivedFields } from "@/lib/calculations/ranking";
 import { MonthlyReport, OfflineData, SponsorshipData } from "@/lib/types";
 import { OFFLINE_MATERIAL_RATE } from "@/lib/config";
-import { EMPTY_FEES, DEFAULT_SPONSORSHIP } from "@/lib/constants";
-import { getErrorMessage } from "@/lib/utils/error";
+import {
+  EMPTY_FEES,
+  DEFAULT_SPONSORSHIP,
+  GOSAN_VENUE_ID,
+} from "@/lib/constants";
+import { errorJson, serverErrorJson } from "@/lib/utils/api-response";
 
 /**
  * POST /api/scrape
@@ -39,10 +43,7 @@ export async function POST(request: NextRequest) {
     const month: number = body.month ?? now.getMonth() + 1;
 
     if (month < 1 || month > 12) {
-      return NextResponse.json(
-        { error: "month는 1~12 사이여야 합니다." },
-        { status: 400 }
-      );
+      return errorJson("month는 1~12 사이여야 합니다.", 400);
     }
 
     // 1) 스크레이핑 (순수 수집만)
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
       ? existing.offline.map(calcOfflineVenueProfit)
       : [
           {
-            venueId: "gosan",
+            venueId: GOSAN_VENUE_ID,
             venueName: "고산의낮",
             revenue: 0,
             totalQuantity: 0,
@@ -118,8 +119,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(report);
   } catch (error) {
-    const message = getErrorMessage(error, "데이터 수집 실패");
     console.error("[POST /api/scrape]", error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorJson(error, "데이터 수집 실패");
   }
 }

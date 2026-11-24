@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { ProductMatrixRow } from "@/lib/types";
+import { parseQty } from "@/lib/calculations/platform-edit";
+import { useFocusHighlight } from "./platform/useFocusHighlight";
 
 // ─── hover + focus 하이라이트 입력 행 ───────────────────────────────────────
 
-export function InputRow({
+function InputRow({
   label,
   value,
   onChange,
@@ -16,18 +18,15 @@ export function InputRow({
   onChange: (v: number) => void;
   onBlur: (v: number) => void;
 }) {
-  const [focused, setFocused] = useState(false);
+  const { focused, setFocused, onMouseEnter, onMouseLeave } =
+    useFocusHighlight("var(--warm-100)");
 
   return (
     <div
       className="flex items-center justify-between gap-3 px-2 py-1.5 -mx-2 rounded-lg transition-colors"
       style={{ backgroundColor: focused ? "var(--brand-50)" : undefined }}
-      onMouseEnter={(e) => {
-        if (!focused) e.currentTarget.style.backgroundColor = "var(--warm-100)";
-      }}
-      onMouseLeave={(e) => {
-        if (!focused) e.currentTarget.style.backgroundColor = "";
-      }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <span
         className="text-xs truncate flex-1 transition-colors"
@@ -40,14 +39,16 @@ export function InputRow({
         type="number"
         min="0"
         value={value}
-        onChange={(e) => onChange(Math.max(0, Number(e.target.value)))}
+        onChange={(e) => onChange(parseQty(e.target.value))}
         onFocus={() => setFocused(true)}
         onBlur={(e) => {
           setFocused(false);
-          onBlur(Math.max(0, Number(e.target.value)));
+          onBlur(parseQty(e.target.value));
         }}
         className="w-16 shrink-0 text-right text-xs border rounded px-2 py-1 focus:outline-none transition-colors"
-        style={{ borderColor: focused ? "var(--brand-400)" : "var(--warm-200)" }}
+        style={{
+          borderColor: focused ? "var(--brand-400)" : "var(--warm-200)",
+        }}
       />
     </div>
   );
@@ -74,8 +75,6 @@ interface Props {
   handmadeQuantity: number;
   /** 합계 라인 앞 접두어 ("전체" | "총 제공량") */
   summaryPrefix: string;
-  /** 저장된 아이템을 접혀 있어도 위에 항상 표시 (협찬용) */
-  showSummaryList?: boolean;
   /** blur 시 변경이 있을 때 호출 — 전체 Record<productName, quantity> 전달 */
   onSave: (quantities: Record<string, number>) => Promise<void>;
 }
@@ -87,35 +86,38 @@ export default function ProductQtyEditor({
   totalQuantity,
   handmadeQuantity,
   summaryPrefix,
-  showSummaryList = false,
   onSave,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
-    Object.fromEntries(savedItems.map((i) => [i.productName, i.quantity]))
+    Object.fromEntries(savedItems.map((i) => [i.productName, i.quantity])),
   );
 
   // 부모 데이터 갱신 시 로컬 수량 동기화
   useEffect(() => {
-    setQuantities(Object.fromEntries(savedItems.map((i) => [i.productName, i.quantity])));
+    setQuantities(
+      Object.fromEntries(savedItems.map((i) => [i.productName, i.quantity])),
+    );
   }, [savedItems]);
 
   const sorted = useMemo(
-    () => [...editList].sort((a, b) => a.productName.localeCompare(b.productName, "ko")),
-    [editList]
+    () =>
+      [...editList].sort((a, b) =>
+        a.productName.localeCompare(b.productName, "ko"),
+      ),
+    [editList],
   );
 
   const handleBlur = useCallback(
     (name: string, value: number) => {
-      const prev = savedItems.find((i) => i.productName === name)?.quantity ?? 0;
+      const prev =
+        savedItems.find((i) => i.productName === name)?.quantity ?? 0;
       if (value !== prev) {
         onSave({ ...quantities, [name]: value });
       }
     },
-    [savedItems, quantities, onSave]
+    [savedItems, quantities, onSave],
   );
-
-  const summaryItems = showSummaryList ? savedItems.filter((i) => i.quantity > 0) : [];
 
   return (
     <div className="mt-3 pt-3 border-t border-warm-100">
@@ -136,27 +138,15 @@ export default function ProductQtyEditor({
             stroke="currentColor"
             strokeWidth={2}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M19 9l-7 7-7-7"
+            />
           </svg>
         </button>
       ) : (
         <p className="text-xs text-gray-400 mb-1.5">{label}</p>
-      )}
-
-      {/* 저장된 아이템 요약 (협찬용 — showSummaryList=true 시만 표시) */}
-      {summaryItems.length > 0 && (
-        <ul className="mt-1 mb-2 space-y-0.5">
-          {summaryItems.map((item) => (
-            <li
-              key={item.productName}
-              className="text-sm text-gray-600 rounded-md cursor-default"
-              style={{ padding: "4px 6px", margin: "0 -6px" }}
-            >
-              {item.productName}{" "}
-              <span className="font-semibold text-gray-800">{item.quantity}개</span>
-            </li>
-          ))}
-        </ul>
       )}
 
       {/* 합계 라인 */}

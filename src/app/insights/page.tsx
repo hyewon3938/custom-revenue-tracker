@@ -1,17 +1,10 @@
-import { listReports, loadReport } from "@/lib/storage/report-store";
+import { loadAllReports } from "@/lib/storage/report-store";
 import { buildOverviewData } from "@/lib/calculations/overview";
 import OverviewStatCards from "@/components/insights/OverviewStatCards";
 import ChartsSection from "@/components/insights/ChartsSection";
 
 async function getOverviewData() {
-  const list = await listReports();
-  const results = await Promise.all(
-    list.map(({ year, month }) => loadReport(year, month))
-  );
-  const reports = results.filter(
-    (r): r is NonNullable<typeof r> => r !== null
-  );
-  return buildOverviewData(reports);
+  return buildOverviewData(await loadAllReports());
 }
 
 export default async function InsightsPage() {

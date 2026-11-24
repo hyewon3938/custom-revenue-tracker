@@ -14,6 +14,7 @@ import {
   NAVER_SHIPPING_COST,
   COUPANG_SHIPPING_MARKUP,
 } from "@/lib/config";
+import { GOSAN_VENUE_ID } from "@/lib/constants";
 
 // ─── 플랫폼 공통 이익 계산 ──────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ export function gosanMaterialBase(
 /** 입점처별 materialBase 결정 + 이익 계산 (gosan 분기 로직을 한 곳에서 관리) */
 export function calcOfflineVenueProfit(venue: OfflineData): OfflineData {
   const matBase =
-    venue.venueId === "gosan"
+    venue.venueId === GOSAN_VENUE_ID
       ? gosanMaterialBase(venue.revenue, venue.fees.commissionFee)
       : venue.revenue;
   return {
@@ -118,32 +119,20 @@ export function calcOverallSummary(
   offlineVenues: OfflineData[],
   marketingCost: number = 0,
 ): OverallSummary {
-  const offRevenue = offlineVenues.reduce((s, v) => s + v.revenue, 0);
-  const offCommission = offlineVenues.reduce(
-    (s, v) => s + v.fees.commissionFee,
-    0,
-  );
-  const offLogistics = offlineVenues.reduce(
-    (s, v) => s + v.fees.logisticsFee,
-    0,
-  );
-  const offInbound = offlineVenues.reduce(
-    (s, v) => s + v.fees.inboundShippingFee,
-    0,
-  );
-  const offAd = offlineVenues.reduce((s, v) => s + v.fees.adFee, 0);
-  const offProfit = offlineVenues.reduce((s, v) => s + v.profit.profit, 0);
-  const offMaterial = offlineVenues.reduce(
-    (s, v) => s + v.profit.materialCost,
-    0,
-  );
-  const offNetProfit = offlineVenues.reduce(
-    (s, v) => s + v.profit.netProfit,
-    0,
-  );
-  const offTotal = offlineVenues.reduce((s, v) => s + v.totalQuantity, 0);
-  const offHandmade = offlineVenues.reduce((s, v) => s + v.handmadeQuantity, 0);
-  const offOther = offlineVenues.reduce((s, v) => s + v.otherQuantity, 0);
+  const sumOffline = (pick: (venue: OfflineData) => number): number =>
+    offlineVenues.reduce((sum, venue) => sum + pick(venue), 0);
+
+  const offRevenue = sumOffline((v) => v.revenue);
+  const offCommission = sumOffline((v) => v.fees.commissionFee);
+  const offLogistics = sumOffline((v) => v.fees.logisticsFee);
+  const offInbound = sumOffline((v) => v.fees.inboundShippingFee);
+  const offAd = sumOffline((v) => v.fees.adFee);
+  const offProfit = sumOffline((v) => v.profit.profit);
+  const offMaterial = sumOffline((v) => v.profit.materialCost);
+  const offNetProfit = sumOffline((v) => v.profit.netProfit);
+  const offTotal = sumOffline((v) => v.totalQuantity);
+  const offHandmade = sumOffline((v) => v.handmadeQuantity);
+  const offOther = sumOffline((v) => v.otherQuantity);
 
   return {
     totalRevenue: naver.revenue + coupang.revenue + offRevenue,

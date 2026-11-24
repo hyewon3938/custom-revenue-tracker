@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { listReports, loadReport } from "@/lib/storage/report-store";
+import { loadAllReports } from "@/lib/storage/report-store";
 import { buildOverviewData } from "@/lib/calculations/overview";
-import { getErrorMessage } from "@/lib/utils/error";
+import { serverErrorJson } from "@/lib/utils/api-response";
 
 /**
  * GET /api/overview
@@ -12,19 +12,9 @@ import { getErrorMessage } from "@/lib/utils/error";
  */
 export async function GET() {
   try {
-    const list = await listReports(); // 최신순
-
-    const results = await Promise.all(
-      list.map(({ year, month }) => loadReport(year, month))
-    );
-
-    const reports = results.filter(
-      (r): r is NonNullable<typeof r> => r !== null
-    );
-
+    const reports = await loadAllReports(); // 최신순
     return NextResponse.json(buildOverviewData(reports));
   } catch (error) {
-    const message = getErrorMessage(error, "집계 실패");
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorJson(error, "집계 실패");
   }
 }

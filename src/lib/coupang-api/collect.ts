@@ -1,13 +1,17 @@
 import { ProductSales, ScrapeWarning } from "@/lib/types";
-import { detectCategory } from "@/lib/calculations/product";
+import {
+  aggregateProductSales,
+  type ProductQuantityEntry,
+} from "@/lib/calculations/quantity";
+import { getErrorMessage } from "@/lib/utils/error";
 import { getRgOrders } from "./orders";
 
 /**
  * 쿠팡 RG Order API로 주문 데이터 수집.
- * 기존 coupang-sales.ts 스크레이퍼를 대체.
+ * 판매분석 화면을 긁지 않고 주문 API만으로 상품·매출을 구한다.
  *
  * 반환: 제품별 판매수량 + 매출 합계
- * (정산 데이터는 별도 스크레이퍼로 수집)
+ * (정산 데이터는 scrapers/coupang-settlement.ts 스크레이퍼로 수집)
  */
 export async function collectCoupangOrdersViaApi(
   vendorId: string,
@@ -25,31 +29,19 @@ export async function collectCoupangOrdersViaApi(
   try {
     const orders = await getRgOrders(vendorId, startDate, endDate);
 
-    const productMap = new Map<string, ProductSales>();
+    const entries: ProductQuantityEntry[] = [];
     for (const order of orders) {
       for (const item of order.orderItems) {
-        const name = item.productName;
         const qty = item.salesQuantity;
         const price = parseFloat(item.unitSalesPrice) || 0;
 
         revenue += price * qty;
-
-        const existing = productMap.get(name);
-        if (existing) {
-          existing.quantity += qty;
-        } else {
-          productMap.set(name, {
-            productName: name,
-            category: detectCategory(name),
-            platform: "coupang",
-            quantity: qty,
-          });
-        }
+        entries.push({ productName: item.productName, quantity: qty });
       }
     }
-    products = Array.from(productMap.values());
+    products = aggregateProductSales(entries, "coupang");
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error, String(error));
     warnings.push({
       level: "error",
       message: `쿠팡 주문 API 호출 실패: ${msg}`,

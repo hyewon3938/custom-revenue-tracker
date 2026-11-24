@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateSalesInsights } from "@/lib/ai/insights";
-import { loadReport, loadRecentHistory, listReports, updateReport } from "@/lib/storage/report-store";
+import {
+  loadReport,
+  loadRecentHistory,
+  loadAllReports,
+  updateReport,
+} from "@/lib/storage/report-store";
 import { buildOverviewData } from "@/lib/calculations/overview";
 import { ENABLE_AI_INSIGHTS } from "@/lib/config";
-import { getErrorMessage } from "@/lib/utils/error";
+import { errorJson, serverErrorJson } from "@/lib/utils/api-response";
 
 /**
  * POST /api/insights
@@ -18,9 +23,9 @@ export async function POST(request: NextRequest) {
   try {
     // 활성화 플래그 체크
     if (!ENABLE_AI_INSIGHTS) {
-      return NextResponse.json(
-        { error: "AI 인사이트가 비활성화되어 있습니다. .env.local에 ENABLE_AI_INSIGHTS=true를 추가하세요." },
-        { status: 403 }
+      return errorJson(
+        "AI 인사이트가 비활성화되어 있습니다. .env.local에 ENABLE_AI_INSIGHTS=true를 추가하세요.",
+        403
       );
     }
 
@@ -28,17 +33,14 @@ export async function POST(request: NextRequest) {
     const { year, month } = body;
 
     if (!year || !month) {
-      return NextResponse.json(
-        { error: "year, month 필드가 필요합니다." },
-        { status: 400 }
-      );
+      return errorJson("year, month 필드가 필요합니다.", 400);
     }
 
     const report = await loadReport(year, month);
     if (!report) {
-      return NextResponse.json(
-        { error: `${year}년 ${month}월 레포트가 없습니다. 먼저 /api/scrape를 실행하세요.` },
-        { status: 404 }
+      return errorJson(
+        `${year}년 ${month}월 레포트가 없습니다. 먼저 /api/scrape를 실행하세요.`,
+        404
       );
     }
 
@@ -46,10 +48,7 @@ export async function POST(request: NextRequest) {
     const history = await loadRecentHistory(year, month, 3);
 
     // 전체 기간 개요 데이터 로드 (장기 추세 분석용)
-    const allList = await listReports();
-    const allReports = (
-      await Promise.all(allList.map(({ year: y, month: m }) => loadReport(y, m)))
-    ).filter((r): r is NonNullable<typeof r> => r !== null);
+    const allReports = await loadAllReports();
     const { months: overview } = buildOverviewData(allReports);
 
     const insights = await generateSalesInsights(report, history, overview);
@@ -61,8 +60,7 @@ export async function POST(request: NextRequest) {
       lastModifiedAt: updated.lastModifiedAt,
     });
   } catch (error) {
-    const message = getErrorMessage(error, "인사이트 생성 실패");
     console.error("[POST /api/insights] 인사이트 생성 실패");
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorJson(error, "인사이트 생성 실패");
   }
 }

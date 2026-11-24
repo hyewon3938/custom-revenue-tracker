@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listVersions, restoreVersion } from "@/lib/storage/report-store";
-import { getErrorMessage } from "@/lib/utils/error";
+import {
+  errorJson,
+  serverErrorJson,
+  parseYearMonth,
+} from "@/lib/utils/api-response";
 
 /**
  * GET /api/report/versions?year=X&month=Y
@@ -13,27 +17,18 @@ export async function GET(request: NextRequest) {
     const monthParam = searchParams.get("month");
 
     if (!yearParam || !monthParam) {
-      return NextResponse.json(
-        { error: "year, month 파라미터가 필요합니다." },
-        { status: 400 }
-      );
+      return errorJson("year, month 파라미터가 필요합니다.", 400);
     }
 
-    const year = parseInt(yearParam);
-    const month = parseInt(monthParam);
-
-    if (isNaN(year) || isNaN(month)) {
-      return NextResponse.json(
-        { error: "year, month는 숫자여야 합니다." },
-        { status: 400 }
-      );
+    const period = parseYearMonth(yearParam, monthParam);
+    if (!period) {
+      return errorJson("year, month는 숫자여야 합니다.", 400);
     }
 
-    const versions = await listVersions(year, month);
+    const versions = await listVersions(period.year, period.month);
     return NextResponse.json(versions);
   } catch (error) {
-    const message = getErrorMessage(error, "버전 목록 조회 실패");
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorJson(error, "버전 목록 조회 실패");
   }
 }
 
@@ -47,16 +42,12 @@ export async function POST(request: NextRequest) {
     const { year, month, timestamp } = await request.json();
 
     if (!year || !month || !timestamp) {
-      return NextResponse.json(
-        { error: "year, month, timestamp 필드가 필요합니다." },
-        { status: 400 }
-      );
+      return errorJson("year, month, timestamp 필드가 필요합니다.", 400);
     }
 
     const report = await restoreVersion(year, month, timestamp);
     return NextResponse.json(report);
   } catch (error) {
-    const message = getErrorMessage(error, "버전 복구 실패");
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorJson(error, "버전 복구 실패");
   }
 }

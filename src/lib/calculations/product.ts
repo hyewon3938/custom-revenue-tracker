@@ -38,7 +38,7 @@ export function reclassifyAndSummarize(products: ProductSales[]) {
 // ─── 상품명 키워드 유틸 (mapping-store, generate-mapping 공유) ──────────────
 
 /** 상품명 비교 시 무시할 불용어 */
-export const STOP_WORDS = new Set([
+const STOP_WORDS = new Set([
   // 공통 제품 유형
   "끈갈피", "책갈피", "비즈", "북마크", "끈", "북클립",
   // 판매 목적어
