@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { MonthlyReport } from "@/lib/types";
 import OverallSummarySection from "@/components/dashboard/OverallSummarySection";
 import PlatformSection from "@/components/dashboard/PlatformSection";
@@ -10,181 +10,49 @@ import MatrixSection from "@/components/dashboard/MatrixSection";
 import InsightsSection from "@/components/dashboard/InsightsSection";
 import ScrapeWarningBanner from "@/components/dashboard/ScrapeWarningBanner";
 import VersionHistoryModal from "@/components/dashboard/VersionHistoryModal";
-import { COLLECT_TIMEOUT_MS } from "@/lib/constants";
+import MonthlyHeader from "@/components/monthly/MonthlyHeader";
+import AlertBanner from "@/components/monthly/AlertBanner";
+import { useMonthlyReport } from "@/hooks/useMonthlyReport";
+import { useReportActions } from "@/hooks/useReportActions";
+import { useRestoreBanner } from "@/hooks/useRestoreBanner";
 
 const THIS_YEAR = new Date().getFullYear();
 const THIS_MONTH = new Date().getMonth() + 1;
 
 export default function MonthlyPage() {
-  const [report, setReport] = useState<MonthlyReport | null>(null);
-  const [savedList, setSavedList] = useState<{ year: number; month: number }[]>(
-    [],
-  );
-  const [selectedYear, setSelectedYear] = useState(THIS_YEAR);
-  const [selectedMonth, setSelectedMonth] = useState(THIS_MONTH);
+  const {
+    report,
+    setReport,
+    savedList,
+    setSavedList,
+    selectedYear,
+    setSelectedYear,
+    selectedMonth,
+    setSelectedMonth,
+    isLoading,
+    error,
+    setError,
+  } = useMonthlyReport(THIS_YEAR, THIS_MONTH);
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCollecting, setIsCollecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { isCollecting, handleCollect, handleUpdate, handleRegenerate } =
+    useReportActions({
+      selectedYear,
+      selectedMonth,
+      setReport,
+      setSavedList,
+      setError,
+    });
+
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
-  const [restoreBanner, setRestoreBanner] = useState<string | null>(null);
-
-  // 저장된 레포트 목록 초기 로드
-  useEffect(() => {
-    fetch("/api/report")
-      .then((r) => r.json())
-      .then((list: { year: number; month: number }[]) => {
-        // 목록 조회가 에러 객체를 반환한 경우 방어 (savedList는 항상 배열이어야 함)
-        if (!Array.isArray(list)) return;
-        setSavedList(list);
-        if (list.length > 0) {
-          setSelectedYear(list[0].year);
-          setSelectedMonth(list[0].month);
-        }
-      })
-      .catch(console.error);
-  }, []);
-
-  // 선택 월 변경 시 레포트 로드
-  //
-  // savedList는 의존성에서 제외한다. 수집 직후 savedList에 새 달이 추가되면
-  // 이 effect가 다시 돌면서 방금 응답으로 받은 레포트를 굳이 재조회했고,
-  // 그 재조회가 끝날 때까지 화면 전체가 "불러오는 중"으로 덮였다.
-  // (재수집은 savedList가 그대로라 재조회가 없어 정상 동작 — 첫 수집만 멈춘 이유)
-  useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-
-    setIsLoading(true);
-    setError(null);
-    fetch(`/api/report?year=${selectedYear}&month=${selectedMonth}`, {
-      signal: controller.signal,
-    })
-      .then((r) => {
-        if (r.status === 404) return null; // 아직 수집하지 않은 달
-        if (!r.ok) throw new Error("레포트 로드 실패");
-        return r.json();
-      })
-      .then((data: MonthlyReport | null) => {
-        if (!cancelled) setReport(data);
-      })
-      .catch((e: unknown) => {
-        if (cancelled || (e instanceof Error && e.name === "AbortError"))
-          return;
-        setError(e instanceof Error ? e.message : "레포트 로드 실패");
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-
-    // 월을 빠르게 바꿔도 이전 응답이 뒤늦게 덮어쓰지 않도록 취소
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [selectedYear, selectedMonth]);
-
-  // 데이터 수집
-  const handleCollect = async () => {
-    setIsCollecting(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/scrape", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year: selectedYear, month: selectedMonth }),
-        signal: AbortSignal.timeout(COLLECT_TIMEOUT_MS),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "데이터 수집 중 오류가 발생했습니다.");
-      }
-      const data: MonthlyReport = await res.json();
-      setReport(data);
-      setSavedList((prev) => {
-        const exists = prev.some(
-          (r) => r.year === selectedYear && r.month === selectedMonth,
-        );
-        if (exists) return prev;
-        return [{ year: selectedYear, month: selectedMonth }, ...prev];
-      });
-    } catch (err) {
-      if (err instanceof Error && err.name === "TimeoutError") {
-        setError(
-          `수집 응답이 ${COLLECT_TIMEOUT_MS / 60_000}분 안에 오지 않았습니다. ` +
-            `터미널 로그를 확인한 뒤 다시 시도해주세요.`,
-        );
-      } else {
-        setError(err instanceof Error ? err.message : "알 수 없는 오류");
-      }
-    } finally {
-      setIsCollecting(false);
-    }
-  };
-
-  // 수기 편집 (PATCH)
-  const handleUpdate = useCallback(
-    async (patch: object) => {
-      try {
-        const res = await fetch("/api/report", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            year: selectedYear,
-            month: selectedMonth,
-            ...patch,
-          }),
-        });
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error ?? "저장 실패");
-        }
-        const updated: MonthlyReport = await res.json();
-        setReport(updated);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.",
-        );
-      }
-    },
-    [selectedYear, selectedMonth],
-  );
-
-  // AI 인사이트 재생성
-  const handleRegenerate = async () => {
-    try {
-      const res = await fetch("/api/insights", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year: selectedYear, month: selectedMonth }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "인사이트 생성 실패");
-      }
-      const { insights, insightsGeneratedAt, lastModifiedAt } =
-        await res.json();
-      setReport((prev) =>
-        prev
-          ? { ...prev, insights, insightsGeneratedAt, lastModifiedAt }
-          : prev,
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "인사이트 생성 중 오류가 발생했습니다.",
-      );
-    }
-  };
+  const { restoreBanner, showRestoreBanner, dismissRestoreBanner } =
+    useRestoreBanner();
 
   // 버전 복구
   const handleRestore = (restored: MonthlyReport) => {
     setReport(restored);
-    setRestoreBanner(
+    showRestoreBanner(
       `${selectedYear}년 ${selectedMonth}월 이전 버전으로 복구되었습니다. 현재 데이터는 백업되었습니다.`,
     );
-    setTimeout(() => setRestoreBanner(null), 8000);
   };
 
   const hasSaved = savedList.some(
@@ -194,85 +62,28 @@ export default function MonthlyPage() {
   return (
     <div className="space-y-8">
       {/* ─── 헤더 컨트롤 ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          {/* 연도 선택 */}
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="border border-warm-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
-          >
-            {[2024, 2025, 2026].map((y) => (
-              <option key={y} value={y}>
-                {y}년
-              </option>
-            ))}
-          </select>
-
-          {/* 월 선택 */}
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="border border-warm-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
-          >
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-              <option key={m} value={m}>
-                {m}월
-              </option>
-            ))}
-          </select>
-
-          {/* 수집 시각 */}
-          {report && (
-            <span className="text-xs text-gray-400 hidden sm:inline">
-              수집:{" "}
-              {new Date(report.collectedAt).toLocaleString("ko-KR", {
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {report && (
-            <button
-              onClick={() => setIsVersionModalOpen(true)}
-              className="text-sm text-brand-500 hover:text-brand-700 transition-colors"
-            >
-              버전 이력
-            </button>
-          )}
-          <button
-            onClick={handleCollect}
-            disabled={isCollecting}
-            className="px-5 py-2.5 bg-brand-500 text-white font-medium rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isCollecting ? "수집 중..." : hasSaved ? "재수집" : "데이터 수집"}
-          </button>
-        </div>
-      </div>
+      <MonthlyHeader
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        onYearChange={setSelectedYear}
+        onMonthChange={setSelectedMonth}
+        report={report}
+        isCollecting={isCollecting}
+        hasSaved={hasSaved}
+        onOpenVersionHistory={() => setIsVersionModalOpen(true)}
+        onCollect={handleCollect}
+      />
 
       {/* ─── 오류 ────────────────────────────────────────────────────── */}
-      {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <AlertBanner variant="error" message={error} />}
 
       {/* ─── 복구 안내 ─────────────────────────────────────────────── */}
       {restoreBanner && (
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center justify-between">
-          <span>{restoreBanner}</span>
-          <button
-            onClick={() => setRestoreBanner(null)}
-            className="text-blue-400 hover:text-blue-600 ml-4 shrink-0"
-          >
-            &times;
-          </button>
-        </div>
+        <AlertBanner
+          variant="restore"
+          message={restoreBanner}
+          onDismiss={dismissRestoreBanner}
+        />
       )}
 
       {/* ─── 로딩 ────────────────────────────────────────────────────── */}
