@@ -7,7 +7,17 @@ import {
   SalesInsight,
 } from "@/lib/types";
 import { AI_MODEL, GROQ_API_KEY } from "@/lib/config";
-import { buildPrompt, generateSalesInsights } from "./insights";
+import {
+  buildPrompt,
+  buildSupplementPrompt,
+  findTypeDeficit,
+  generateSalesInsights,
+  parseInsightsJson,
+  sanitizeText,
+} from "./insights";
+import { buildPrompt as buildPromptFromSections } from "./prompt-sections";
+import { sanitizeText as sanitizeTextFromSanitize } from "./sanitize";
+import { SYSTEM_PROMPT } from "./system-prompt";
 
 // ─── 픽스처 (임의의 둥근 숫자) ─────────────────────────────────────────
 
@@ -397,7 +407,9 @@ function stubGroq(...responses: Response[]) {
   vi.stubGlobal("fetch", fetchMock);
 
   const bodyOf = (callIndex: number): CapturedBody =>
-    JSON.parse(String(fetchMock.mock.calls[callIndex][1]?.body)) as CapturedBody;
+    JSON.parse(
+      String(fetchMock.mock.calls[callIndex][1]?.body),
+    ) as CapturedBody;
 
   return { fetchMock, bodyOf };
 }
@@ -578,6 +590,146 @@ describe("generateSalesInsights", () => {
 
     await expect(generateSalesInsights(makeReport())).rejects.toThrow(
       "Groq API에서 텍스트 응답을 받지 못했습니다.",
+    );
+  });
+
+  test("분리된 SYSTEM_PROMPT를 시스템 메시지로 그대로 보낸다", async () => {
+    const { bodyOf } = stubGroq(okResponse(JSON.stringify(FULL_INSIGHTS)));
+
+    await generateSalesInsights(makeReport());
+
+    expect(bodyOf(0).messages[0].content).toBe(SYSTEM_PROMPT);
+  });
+});
+
+// ─── 기존 import 경로 호환 ─────────────────────────────────────────────
+
+describe("insights re-export", () => {
+  test("buildPrompt와 sanitizeText를 기존 경로에서 그대로 내보낸다", () => {
+    expect(buildPrompt).toBe(buildPromptFromSections);
+    expect(sanitizeText).toBe(sanitizeTextFromSanitize);
+  });
+});
+
+// ─── parseInsightsJson ─────────────────────────────────────────────────
+
+describe("parseInsightsJson", () => {
+  test("순수 JSON 배열을 파싱한다", () => {
+    expect(parseInsightsJson(JSON.stringify(FULL_INSIGHTS))).toEqual(
+      FULL_INSIGHTS,
+    );
+  });
+
+  test("코드블록과 앞뒤 설명이 섞여 있어도 배열만 뽑아 파싱한다", () => {
+    const text = `  아래는 분석 결과입니다.\n\n\`\`\`json\n${JSON.stringify(FULL_INSIGHTS, null, 2)}\n\`\`\`\n\n이상입니다.  `;
+    expect(parseInsightsJson(text)).toEqual(FULL_INSIGHTS);
+  });
+
+  test("제목과 설명의 한자를 치환·제거한다", () => {
+    const text = JSON.stringify([
+      insight("neutral", "分析 요약", "效果的인 戰略과 미등록 한자 鬱 제거"),
+    ]);
+    expect(parseInsightsJson(text)).toEqual([
+      insight("neutral", "분석 요약", "효과적인 전략과 미등록 한자  제거"),
+    ]);
+  });
+
+  test("빈 배열은 빈 배열로 돌려준다", () => {
+    expect(parseInsightsJson("[]")).toEqual([]);
+  });
+
+  test("대괄호가 없으면 null을 반환한다", () => {
+    expect(parseInsightsJson("배열이 없는 응답")).toBeNull();
+    expect(parseInsightsJson("")).toBeNull();
+  });
+
+  test("JSON 문법이 깨져 있으면 null을 반환한다", () => {
+    expect(parseInsightsJson('[{"title": "닫히지 않은 객체"]')).toBeNull();
+  });
+
+  test("첫 '['부터 마지막 ']'까지를 잘라내므로 뒤쪽 잡음에 대괄호가 있으면 null이다", () => {
+    const text = `${JSON.stringify(FULL_INSIGHTS)}\n참고: [표 1] 기준`;
+    expect(parseInsightsJson(text)).toBeNull();
+  });
+});
+
+// ─── findTypeDeficit ───────────────────────────────────────────────────
+
+describe("findTypeDeficit", () => {
+  test("action 2개, positive+negative 3개 이상이면 부족분이 없다", () => {
+    expect(findTypeDeficit(FULL_INSIGHTS)).toEqual({ action: 0, posNeg: 0 });
+  });
+
+  test("빈 배열이면 최소 개수 전체가 부족하다", () => {
+    expect(findTypeDeficit([])).toEqual({ action: 2, posNeg: 3 });
+  });
+
+  test("타입별로 모자란 개수만 센다", () => {
+    const insights = [
+      insight("action", "액션 하나"),
+      insight("positive", "긍정 하나"),
+      insight("neutral", "중립 하나"),
+    ];
+    expect(findTypeDeficit(insights)).toEqual({ action: 1, posNeg: 2 });
+  });
+
+  test("positive와 negative는 합쳐서 센다", () => {
+    const insights = [
+      insight("negative", "부정 하나"),
+      insight("negative", "부정 둘"),
+      insight("negative", "부정 셋"),
+    ];
+    expect(findTypeDeficit(insights)).toEqual({ action: 2, posNeg: 0 });
+  });
+
+  test("최소 개수를 넘겨도 음수가 되지 않는다", () => {
+    const insights = [...FULL_INSIGHTS, ...FULL_INSIGHTS];
+    expect(findTypeDeficit(insights)).toEqual({ action: 0, posNeg: 0 });
+  });
+});
+
+// ─── buildSupplementPrompt ─────────────────────────────────────────────
+
+describe("buildSupplementPrompt", () => {
+  const existing = [
+    insight("action", "액션 하나"),
+    insight("neutral", "중립 하나"),
+  ];
+
+  test("두 타입이 모두 부족하면 두 요청을 모두 담는다", () => {
+    expect(buildSupplementPrompt(existing, { action: 1, posNeg: 3 }))
+      .toMatchInlineSnapshot(`
+        "기존에 생성된 인사이트:
+        - [action] 액션 하나
+        - [neutral] 중립 하나
+
+        위 인사이트에서 아래 타입이 부족합니다. **기존 인사이트와 중복되지 않는 새로운 관점**으로 추가 생성해주세요:
+
+        - **action** 타입 1개 (구체적이고 즉시 실행 가능한 액션)
+        - **positive 또는 negative** 타입 3개
+
+        동일한 JSON 배열 형식으로 추가할 인사이트만 반환하세요."
+      `);
+  });
+
+  test("positive·negative만 부족하면 해당 요청만 담는다", () => {
+    expect(buildSupplementPrompt(existing, { action: 0, posNeg: 2 }))
+      .toMatchInlineSnapshot(`
+        "기존에 생성된 인사이트:
+        - [action] 액션 하나
+        - [neutral] 중립 하나
+
+        위 인사이트에서 아래 타입이 부족합니다. **기존 인사이트와 중복되지 않는 새로운 관점**으로 추가 생성해주세요:
+
+        - **positive 또는 negative** 타입 2개
+
+        동일한 JSON 배열 형식으로 추가할 인사이트만 반환하세요."
+      `);
+  });
+
+  test("기존 인사이트가 없으면 목록 줄이 비어 있다", () => {
+    expect(buildSupplementPrompt([], { action: 2, posNeg: 0 })).toBe(
+      "기존에 생성된 인사이트:\n\n\n위 인사이트에서 아래 타입이 부족합니다. **기존 인사이트와 중복되지 않는 새로운 관점**으로 추가 생성해주세요:\n\n- **action** 타입 2개 (구체적이고 즉시 실행 가능한 액션)\n\n동일한 JSON 배열 형식으로 추가할 인사이트만 반환하세요.",
     );
   });
 });
