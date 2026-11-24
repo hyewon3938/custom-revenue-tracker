@@ -27,6 +27,7 @@ import {
   saveReport,
   updateReport,
   listReports,
+  loadAllReports,
   loadRecentHistory,
   listVersions,
   restoreVersion,
@@ -282,6 +283,27 @@ describe("listReports", () => {
 
   it("파일이 없으면 빈 배열", async () => {
     expect(await listReports()).toEqual([]);
+  });
+});
+
+describe("loadAllReports", () => {
+  it("저장된 모든 레포트를 최신순으로 읽고 마이그레이션을 적용한다", async () => {
+    putRaw("2024-12.json", omit(makeReport(2024, 12), "warnings"));
+    putRaw("2025-02.json", makeReport(2025, 2));
+    putRaw("2025-01.json", makeReport(2025, 1));
+    putRaw("2025-01.v100.json", makeReport(2025, 1));
+
+    const reports = await loadAllReports();
+    expect(reports.map((r) => r.period)).toEqual([
+      { year: 2025, month: 2 },
+      { year: 2025, month: 1 },
+      { year: 2024, month: 12 },
+    ]);
+    expect(reports[2].warnings).toEqual([]);
+  });
+
+  it("레포트가 없으면 빈 배열", async () => {
+    expect(await loadAllReports()).toEqual([]);
   });
 });
 
