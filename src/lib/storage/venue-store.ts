@@ -36,7 +36,7 @@ async function saveVenues(registry: VenueRegistry): Promise<void> {
 }
 
 /** 한글 이름에서 slug ID 생성. 중복 시 숫자 suffix 추가. */
-function generateId(name: string, existing: VenueInfo[]): string {
+export function generateId(name: string, existing: VenueInfo[]): string {
   // 한글은 그대로 사용하되 공백과 특수문자 제거 후 소문자
   const base = name
     .toLowerCase()

@@ -1,5 +1,4 @@
 import fs from "fs/promises";
-import path from "path";
 import {
   MonthlyReport,
   NaverData,
@@ -9,143 +8,28 @@ import {
   DeepPartial,
 } from "@/lib/types";
 import {
-  calcPlatformProfit,
-  calcNaverShippingStats,
-  naverMaterialBase,
-  coupangMaterialBase,
-  calcOfflineVenueProfit,
-} from "@/lib/calculations/profit";
-import { reclassifyAndSummarize } from "@/lib/calculations/product";
+  applyOfflineUpdates,
+  recalcPlatformProfits,
+  mergeSponsorshipData,
+} from "@/lib/calculations/report-update";
 import { rebuildDerivedFields } from "@/lib/calculations/ranking";
 import { loadProductMapping } from "@/lib/storage/mapping-store";
+import { withLock } from "@/lib/storage/report-lock";
+import { migrateReport } from "@/lib/storage/report-migration";
+import {
+  DATA_DIR,
+  getReportPath,
+  ensureDataDir,
+} from "@/lib/storage/report-paths";
+import { createBackup } from "@/lib/storage/report-versions";
 import { deepMerge } from "@/lib/utils/deep-merge";
-import { pad, getPrevMonth } from "@/lib/utils/format";
-import { calcTotalSponsorshipCost } from "@/lib/calculations/sponsorship";
-import { DEFAULT_SPONSORSHIP } from "@/lib/constants";
+import { getPrevMonth } from "@/lib/utils/format";
+import { isEnoent } from "@/lib/utils/fs";
 
-const DATA_DIR = path.join(process.cwd(), "data", "reports");
+// 버전 관리 함수는 report-versions.ts 로 옮겼고, 기존 import 경로 유지를 위해 다시 내보낸다.
+export { listVersions, restoreVersion } from "@/lib/storage/report-versions";
 
-// ─── 버전 관리 상수 ─────────────────────────────────────────────────────
-const MAX_VERSIONS = 5;
-const VERSION_REGEX = /^(\d{4})-(\d{2})\.v(\d+)\.json$/;
 const REPORT_REGEX = /^(\d{4})-(\d{2})\.json$/;
-
-// 파일별 쓰기 잠금 — 동시 PATCH 요청으로 인한 JSON 손상 방지
-const writeLocks = new Map<string, Promise<void>>();
-function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const prev = writeLocks.get(key) ?? Promise.resolve();
-  const next = prev.then(fn, fn);
-  writeLocks.set(
-    key,
-    next.then(
-      () => {},
-      () => {},
-    ),
-  );
-  return next;
-}
-
-function getReportPath(year: number, month: number): string {
-  return path.join(DATA_DIR, `${year}-${pad(month)}.json`);
-}
-
-function getVersionPath(
-  year: number,
-  month: number,
-  timestamp: number,
-): string {
-  return path.join(DATA_DIR, `${year}-${pad(month)}.v${timestamp}.json`);
-}
-
-async function ensureDataDir(): Promise<void> {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-}
-
-// ─── 버전 관리 내부 헬퍼 ────────────────────────────────────────────────
-
-/** 오래된 백업 자동 삭제 (MAX_VERSIONS 초과분) */
-async function deleteOldVersions(year: number, month: number): Promise<void> {
-  const versions = await listVersions(year, month);
-  if (versions.length <= MAX_VERSIONS) return;
-  const toDelete = versions.slice(MAX_VERSIONS);
-  for (const v of toDelete) {
-    await fs.unlink(getVersionPath(year, month, v.timestamp)).catch(() => {});
-  }
-}
-
-/** 현재 레포트를 타임스탬프 백업 파일로 복사 */
-async function createBackup(
-  year: number,
-  month: number,
-): Promise<number | null> {
-  const filePath = getReportPath(year, month);
-  try {
-    await fs.access(filePath);
-  } catch {
-    return null; // 기존 파일 없으면 백업할 것 없음
-  }
-  const timestamp = Date.now();
-  await fs.copyFile(filePath, getVersionPath(year, month, timestamp));
-  await deleteOldVersions(year, month);
-  return timestamp;
-}
-
-// ─── 버전 관리 export 함수 ──────────────────────────────────────────────
-
-/** 특정 월의 백업 버전 목록 (최신순) */
-export async function listVersions(
-  year: number,
-  month: number,
-): Promise<{ timestamp: number; date: string; size: number }[]> {
-  await ensureDataDir();
-  const prefix = `${year}-${pad(month)}.v`;
-  const files = await fs.readdir(DATA_DIR);
-  const versions: { timestamp: number; date: string; size: number }[] = [];
-
-  for (const f of files) {
-    if (!f.startsWith(prefix) || !f.endsWith(".json")) continue;
-    const match = f.match(VERSION_REGEX);
-    if (!match) continue;
-    const ts = parseInt(match[3]);
-    const stat = await fs.stat(path.join(DATA_DIR, f));
-    versions.push({
-      timestamp: ts,
-      date: new Date(ts).toISOString(),
-      size: stat.size,
-    });
-  }
-
-  return versions.sort((a, b) => b.timestamp - a.timestamp);
-}
-
-/** 백업 버전으로 복구 (현재 데이터는 자동 백업) */
-export async function restoreVersion(
-  year: number,
-  month: number,
-  timestamp: number,
-): Promise<MonthlyReport> {
-  const filePath = getReportPath(year, month);
-  const versionPath = getVersionPath(year, month, timestamp);
-
-  try {
-    await fs.access(versionPath);
-  } catch {
-    throw new Error(`해당 버전을 찾을 수 없습니다: ${timestamp}`);
-  }
-
-  return withLock(filePath, async () => {
-    // 복구 전 현재 데이터 백업
-    await createBackup(year, month);
-    // 버전 파일을 현재 경로로 복사
-    await fs.copyFile(versionPath, filePath);
-    // 마이그레이션 적용 + 타임스탬프 갱신
-    const raw = await fs.readFile(filePath, "utf-8");
-    const report = migrateReport(JSON.parse(raw));
-    report.lastModifiedAt = new Date().toISOString();
-    await fs.writeFile(filePath, JSON.stringify(report, null, 2), "utf-8");
-    return report;
-  });
-}
 
 // ─── 레포트 저장/로드 ───────────────────────────────────────────────────
 
@@ -159,39 +43,6 @@ export async function saveReport(report: MonthlyReport): Promise<void> {
   });
 }
 
-/** 기존 레포트 마이그레이션 */
-function migrateReport(raw: Record<string, unknown>): MonthlyReport {
-  // offline이 배열이 아닌 경우 (구버전) → 배열로 래핑
-  if (raw.offline && !Array.isArray(raw.offline)) {
-    const single = raw.offline as Record<string, unknown>;
-    if (!single.venueId) single.venueId = "gosan";
-    raw.offline = [single];
-  }
-  // NaverData에 shippingCollected/payerCount 없는 경우 기본값 추가
-  const naver = raw.naver as Record<string, unknown> | undefined;
-  if (naver) {
-    if (naver.shippingCollected === undefined) naver.shippingCollected = 0;
-    if (naver.payerCount === undefined) naver.payerCount = 0;
-  }
-  // PlatformFees에 inboundShippingFee 없는 기존 레포트 호환
-  ensureInboundShippingFee(raw.naver);
-  ensureInboundShippingFee(raw.coupang);
-  if (Array.isArray(raw.offline)) {
-    for (const venue of raw.offline) ensureInboundShippingFee(venue);
-  }
-  // warnings 필드 없는 기존 레포트 호환
-  if (!raw.warnings) raw.warnings = [];
-  return raw as unknown as MonthlyReport;
-}
-
-function ensureInboundShippingFee(node: unknown): void {
-  if (!node || typeof node !== "object") return;
-  const fees = (node as { fees?: Record<string, unknown> }).fees;
-  if (fees && fees.inboundShippingFee === undefined) {
-    fees.inboundShippingFee = 0;
-  }
-}
-
 /** 레포트 로드. 없으면 null 반환 */
 export async function loadReport(
   year: number,
@@ -202,149 +53,9 @@ export async function loadReport(
     const raw = await fs.readFile(filePath, "utf-8");
     return migrateReport(JSON.parse(raw));
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (isEnoent(err)) return null;
     throw err;
   }
-}
-
-// ─── updateReport 서브 함수 ────────────────────────────────────────────────
-
-/** 오프라인 입점처 배열에 추가/삭제/수정 반영 */
-function applyOfflineUpdates(
-  existing: OfflineData[],
-  updates: {
-    offline?: DeepPartial<OfflineData>;
-    offlineVenueId?: string;
-    addOfflineVenue?: { id: string; name: string };
-    removeOfflineVenueId?: string;
-  },
-): OfflineData[] {
-  let venues = [...existing];
-
-  if (updates.addOfflineVenue) {
-    const { id, name } = updates.addOfflineVenue;
-    if (!venues.some((v) => v.venueId === id)) {
-      venues.push({
-        venueId: id,
-        venueName: name,
-        revenue: 0,
-        totalQuantity: 0,
-        handmadeQuantity: 0,
-        otherQuantity: 0,
-        fees: {
-          commissionFee: 0,
-          logisticsFee: 0,
-          inboundShippingFee: 0,
-          adFee: 0,
-          settlementAmount: 0,
-        },
-        profit: { profit: 0, materialCost: 0, netProfit: 0 },
-        products: [],
-      });
-    }
-  }
-
-  if (updates.removeOfflineVenueId) {
-    venues = venues.filter((v) => v.venueId !== updates.removeOfflineVenueId);
-  }
-
-  if (updates.offline && updates.offlineVenueId) {
-    venues = venues.map((venue) => {
-      if (venue.venueId !== updates.offlineVenueId) return venue;
-      const merged = deepMerge(venue, updates.offline!);
-      if (updates.offline!.products !== undefined) {
-        const { products, ...qtySummary } = reclassifyAndSummarize(
-          merged.products,
-        );
-        return { ...merged, products, ...qtySummary };
-      }
-      return merged;
-    });
-  }
-
-  return venues;
-}
-
-/** 플랫폼별 카테고리 재분류 + 이익 재계산 */
-function recalcPlatformProfits(
-  naver: NaverData,
-  coupang: CoupangData,
-  offlineVenues: OfflineData[],
-): { naver: NaverData; coupang: CoupangData; offline: OfflineData[] } {
-  const naverReclassified = reclassifyAndSummarize(naver.products);
-  const coupangReclassified = reclassifyAndSummarize(coupang.products);
-
-  const offlineWithProfit: OfflineData[] = offlineVenues.map((v) => {
-    const { products, ...qtySummary } = reclassifyAndSummarize(v.products);
-    return calcOfflineVenueProfit({ ...v, products, ...qtySummary });
-  });
-
-  const naverShippingStats = calcNaverShippingStats(
-    naver.shippingCollected ?? 0,
-    naver.payerCount ?? 0,
-  );
-  const naverFees = {
-    ...naver.fees,
-    logisticsFee: naverShippingStats.sellerCost,
-    adFee: 0,
-  };
-  const naverWithProfit: NaverData = {
-    ...naver,
-    fees: naverFees,
-    shippingStats: naverShippingStats,
-    products: naverReclassified.products,
-    totalQuantity: naverReclassified.totalQuantity,
-    handmadeQuantity: naverReclassified.handmadeQuantity,
-    otherQuantity: naverReclassified.otherQuantity,
-    profit: calcPlatformProfit(
-      naver.revenue,
-      naverFees,
-      naverMaterialBase(naver.revenue, naver.shippingCollected ?? 0),
-    ),
-  };
-
-  const coupangTotalQty = coupangReclassified.totalQuantity;
-  const coupangWithProfit: CoupangData = {
-    ...coupang,
-    products: coupangReclassified.products,
-    totalQuantity: coupangTotalQty,
-    handmadeQuantity: coupangReclassified.handmadeQuantity,
-    otherQuantity: coupangReclassified.otherQuantity,
-    profit: calcPlatformProfit(
-      coupang.revenue,
-      coupang.fees,
-      coupangMaterialBase(coupang.revenue, coupangTotalQty),
-    ),
-  };
-
-  return {
-    naver: naverWithProfit,
-    coupang: coupangWithProfit,
-    offline: offlineWithProfit,
-  };
-}
-
-/** 협찬 데이터 병합 + 수량/비용 자동 재계산 */
-function mergeSponsorshipData(
-  existing: SponsorshipData | undefined,
-  patch: DeepPartial<SponsorshipData> | undefined,
-): SponsorshipData {
-  const base = existing ?? DEFAULT_SPONSORSHIP;
-  const merged = patch ? deepMerge(base, patch) : base;
-
-  // items 변경 없으면 그대로 반환 (marketingCost 수기 수정 포함)
-  if (patch?.items === undefined) return merged;
-
-  const totalQuantity = merged.items.reduce((s, i) => s + i.quantity, 0);
-  const handmadeQuantity = merged.items
-    .filter((i) => i.category === "handmade")
-    .reduce((s, i) => s + i.quantity, 0);
-
-  // 자동 계산 시도 — unitPrice가 모두 입력된 경우만 자동, 아니면 기존값 유지
-  const autoCost = calcTotalSponsorshipCost(merged.items);
-  const marketingCost = autoCost ?? merged.marketingCost;
-
-  return { ...merged, totalQuantity, handmadeQuantity, marketingCost };
 }
 
 // ─── updateReport ──────────────────────────────────────────────────────────
@@ -431,6 +142,15 @@ export async function listReports(): Promise<
       return { year: y, month: m };
     })
     .sort((a, b) => (a.year !== b.year ? b.year - a.year : b.month - a.month));
+}
+
+/** 저장된 전체 레포트를 병렬로 로드 (최신순, 읽는 사이 사라진 월은 제외) */
+export async function loadAllReports(): Promise<MonthlyReport[]> {
+  const list = await listReports();
+  const results = await Promise.all(
+    list.map(({ year, month }) => loadReport(year, month)),
+  );
+  return results.filter((r): r is MonthlyReport => r !== null);
 }
 
 /** 최근 N개월 히스토리 로드 (인사이트 생성용) — [전달, 전전달, ...] 순 */
