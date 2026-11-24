@@ -1,4 +1,5 @@
 import { naverApi } from "./client";
+import { pad } from "@/lib/utils/format";
 import type { OrderListResponse, OrderApiItem, NaverProductOrder } from "./types";
 
 /** 취소/반품 상태 (이 상태의 주문은 매출 집계에서 제외) */
@@ -87,8 +88,8 @@ export function splitDateRange(
 
   while (current <= endDate) {
     const y = current.getFullYear();
-    const m = String(current.getMonth() + 1).padStart(2, "0");
-    const d = String(current.getDate()).padStart(2, "0");
+    const m = pad(current.getMonth() + 1);
+    const d = pad(current.getDate());
     const dateStr = `${y}-${m}-${d}`;
     chunks.push({ from: dateStr, to: dateStr });
     current.setDate(current.getDate() + 1);

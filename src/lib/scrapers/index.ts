@@ -5,7 +5,7 @@ import {
   PlatformFees,
   ScrapeWarning,
 } from "@/lib/types";
-import { pad } from "@/lib/utils/format";
+import { getCoupangVendorId } from "@/lib/config";
 import { loginCoupang } from "./coupang-auth";
 import { getValidSessionPath } from "./session-store";
 import { scrapeCoupangSettlement } from "./coupang-settlement";
@@ -15,6 +15,8 @@ import {
 } from "@/lib/calculations/profit";
 import { withRetry } from "./with-retry";
 import { validateCollectedData } from "./validate";
+import { getDateRange } from "./date-range";
+import { summarizeQuantities } from "@/lib/calculations/quantity";
 import { collectNaverDataViaApi } from "@/lib/naver-api/collect";
 import { collectCoupangOrdersViaApi } from "@/lib/coupang-api/collect";
 
@@ -74,29 +76,6 @@ async function createBrowserPage(storageStatePath?: string | null): Promise<{
   return { browser, context, page };
 }
 
-/**
- * 조회 기간 결정:
- * - 이번 달이면 1일 ~ 어제
- * - 지난 달(과거)이면 1일 ~ 말일
- */
-export function getDateRange(
-  year: number,
-  month: number,
-): { start: string; end: string } {
-  const today = new Date();
-  const isCurrentMonth =
-    today.getFullYear() === year && today.getMonth() + 1 === month;
-
-  const lastDay = new Date(year, month, 0).getDate();
-
-  const endDay = isCurrentMonth ? Math.max(today.getDate() - 1, 1) : lastDay;
-
-  return {
-    start: `${year}-${pad(month)}-01`,
-    end: `${year}-${pad(month)}-${pad(endDay)}`,
-  };
-}
-
 // ─── 플랫폼별 수집 ──────────────────────────────────────────────────────
 
 /**
@@ -123,7 +102,7 @@ async function collectCoupangData(
   const warnings: ScrapeWarning[] = [];
 
   // 1. 주문 데이터: RG API (브라우저 불필요)
-  const vendorId = process.env.COUPANG_VENDOR_ID;
+  const vendorId = getCoupangVendorId();
   if (!vendorId) {
     warnings.push({
       level: "error",
@@ -183,17 +162,15 @@ async function collectCoupangData(
     settlementAmount: 0,
   };
   const products = orderResult.products;
-  const handmadeQuantity = products
-    .filter((p) => p.category === "handmade")
-    .reduce((s, p) => s + p.quantity, 0);
-  const totalQuantity = products.reduce((s, p) => s + p.quantity, 0);
+  const { totalQuantity, handmadeQuantity, otherQuantity } =
+    summarizeQuantities(products);
 
   return {
     data: {
       revenue,
       totalQuantity,
       handmadeQuantity,
-      otherQuantity: totalQuantity - handmadeQuantity,
+      otherQuantity,
       fees,
       profit: calcPlatformProfit(
         revenue,
