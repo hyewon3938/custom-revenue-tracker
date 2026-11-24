@@ -33,29 +33,28 @@ export interface PlatformProfit {
 }
 
 // ─── 네이버 플랫폼 데이터 ─────────────────────────────────────────────────
-export interface NaverData {
-  revenue: number; // 결제금액 (판매분석)
-  shippingCollected: number; // 고객 배송비 합계 (판매분석에서 수집, 재계산용)
-  payerCount: number; // 결제자수 (판매분석에서 수집, 배송 건수 계산용)
+// ─── 플랫폼 공통 필드 (네이버·쿠팡·오프라인 입점처가 함께 가짐) ───────────
+export interface PlatformBase {
+  revenue: number; // 매출
   totalQuantity: number; // 전체 판매수량 (취소 제외)
   handmadeQuantity: number; // 끈갈피/북마크 판매수량
   otherQuantity: number; // 기타 상품 판매수량
   fees: PlatformFees;
-  shippingStats: ShippingStats; // 배송 건수 (네이버 전용)
-  profit: PlatformProfit;
+  profit: PlatformProfit; // 자동 계산
   products: ProductSales[]; // 상품별 판매 내역
 }
 
-// ─── 쿠팡 플랫폼 데이터 ───────────────────────────────────────────────────
-export interface CoupangData {
-  revenue: number; // 매출 (정산 페이지)
-  totalQuantity: number;
-  handmadeQuantity: number;
-  otherQuantity: number;
-  fees: PlatformFees; // settlementAmount는 0으로 저장
-  profit: PlatformProfit;
-  products: ProductSales[];
+// ─── 네이버 플랫폼 데이터 ─────────────────────────────────────────────────
+export interface NaverData extends PlatformBase {
+  // revenue = 결제금액 (판매분석)
+  shippingCollected: number; // 고객 배송비 합계 (판매분석에서 수집, 재계산용)
+  payerCount: number; // 결제자수 (판매분석에서 수집, 배송 건수 계산용)
+  shippingStats: ShippingStats; // 배송 건수 (네이버 전용)
 }
+
+// ─── 쿠팡 플랫폼 데이터 ───────────────────────────────────────────────────
+// revenue = 매출 (정산 페이지), fees.settlementAmount는 0으로 저장
+export type CoupangData = PlatformBase;
 
 // ─── 오프라인 입점처 정보 (레지스트리) ────────────────────────────────────
 export interface VenueInfo {
@@ -65,16 +64,9 @@ export interface VenueInfo {
 }
 
 // ─── 오프라인 입점처 데이터 — 전체 수기 입력 ─────────────────────────────
-export interface OfflineData {
+export interface OfflineData extends PlatformBase {
   venueId: string; // 입점처 레지스트리 ID 참조
   venueName: string; // 입점처명 (기본값: "고산의낮")
-  revenue: number;
-  totalQuantity: number;
-  handmadeQuantity: number;
-  otherQuantity: number;
-  fees: PlatformFees;
-  profit: PlatformProfit; // 자동 계산
-  products: ProductSales[];
 }
 
 // ─── 전체 합계 ────────────────────────────────────────────────────────────
