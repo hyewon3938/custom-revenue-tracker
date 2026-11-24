@@ -1,8 +1,8 @@
 import { getAccessToken, clearTokenCache } from "./auth";
-import { API_REQUEST_TIMEOUT_MS } from "@/lib/config";
+import { fetchJsonWithRetry } from "@/lib/utils/fetch-with-retry";
 
 const BASE_URL = "https://api.commerce.naver.com/external/v1";
-const MAX_RETRIES = 3;
+const HTTP_UNAUTHORIZED = 401;
 
 /**
  * 네이버 커머스 API 요청 래퍼
@@ -20,8 +20,10 @@ export async function naverApi<T>(
 ): Promise<T> {
   const { method = "GET", params, body } = options;
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
+  return fetchJsonWithRetry<T>({
+    label: "네이버",
+    // 토큰 발급 실패도 재시도 대상이므로 시도마다 다시 받는다
+    buildRequest: async () => {
       const token = await getAccessToken();
       const url = new URL(`${BASE_URL}${path}`);
 
@@ -31,37 +33,22 @@ export async function naverApi<T>(
         }
       }
 
-      const response = await fetch(url.toString(), {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      return {
+        url: url.toString(),
+        init: {
+          method,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: body != null ? JSON.stringify(body) : undefined,
         },
-        body: body != null ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          clearTokenCache();
-        }
-        const text = await response.text();
-        throw new Error(`네이버 API 에러 (${response.status}): ${text}`);
+      };
+    },
+    onErrorStatus: (status) => {
+      if (status === HTTP_UNAUTHORIZED) {
+        clearTokenCache();
       }
-
-      return (await response.json()) as T;
-    } catch (error) {
-      if (attempt === MAX_RETRIES) {
-        if (error instanceof Error && error.name === "TimeoutError") {
-          throw new Error(
-            `네이버 API 응답 없음 (${API_REQUEST_TIMEOUT_MS}ms 초과, ${MAX_RETRIES}회 시도)`,
-          );
-        }
-        throw error;
-      }
-      await new Promise((r) => setTimeout(r, 1000 * attempt));
-    }
-  }
-
-  throw new Error("unreachable");
+    },
+  });
 }

@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import { getNaverApiCredentials } from "@/lib/config";
 
 const TOKEN_URL =
   "https://api.commerce.naver.com/external/v1/oauth2/token";
@@ -9,6 +10,12 @@ interface TokenResponse {
   token_type: string;
 }
 
+/** 만료 이만큼 전부터는 캐시된 토큰을 쓰지 않고 새로 발급 (ms) */
+const TOKEN_EXPIRY_MARGIN_MS = 60_000;
+
+/** 서명 타임스탬프를 현재 시각보다 이만큼 앞당김 (ms) */
+const TIMESTAMP_SKEW_MS = 3000;
+
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 /**
@@ -18,19 +25,18 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
  * - 토큰은 만료 1분 전까지 메모리 캐싱
  */
 export async function getAccessToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
+  if (cachedToken && Date.now() < cachedToken.expiresAt - TOKEN_EXPIRY_MARGIN_MS) {
     return cachedToken.token;
   }
 
-  const clientId = process.env.NAVER_CLIENT_ID;
-  const clientSecret = process.env.NAVER_CLIENT_SECRET;
+  const { clientId, clientSecret } = getNaverApiCredentials();
   if (!clientId || !clientSecret) {
     throw new Error(
       "NAVER_CLIENT_ID, NAVER_CLIENT_SECRET 환경변수가 필요합니다."
     );
   }
 
-  const timestamp = String(Date.now() - 3000);
+  const timestamp = String(Date.now() - TIMESTAMP_SKEW_MS);
   const password = `${clientId}_${timestamp}`;
   const hashed = await bcrypt.hash(password, clientSecret);
   const clientSecretSign = Buffer.from(hashed).toString("base64");
