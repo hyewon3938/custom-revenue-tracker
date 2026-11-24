@@ -337,6 +337,101 @@ describe("calcOverallSummary", () => {
     expect(result.totalQuantity).toBe(23); // 10+8+3+2
   });
 
+  test("입점처가 여러 곳이면 모든 합계 필드에 입점처별 값을 더한다", () => {
+    const venues: OfflineData[] = [
+      makeOfflineVenue({
+        venueId: "gosan",
+        revenue: 30000,
+        totalQuantity: 3,
+        handmadeQuantity: 2,
+        otherQuantity: 1,
+        fees: makeFees({
+          commissionFee: 5000,
+          logisticsFee: 700,
+          inboundShippingFee: 110,
+          adFee: 13,
+        }),
+        profit: { profit: 25000, materialCost: 7000, netProfit: 18000 },
+      }),
+      makeOfflineVenue({
+        venueId: "bookshop",
+        revenue: 20000,
+        totalQuantity: 4,
+        handmadeQuantity: 1,
+        otherQuantity: 3,
+        fees: makeFees({
+          commissionFee: 3000,
+          logisticsFee: 900,
+          inboundShippingFee: 220,
+          adFee: 17,
+        }),
+        profit: { profit: 17000, materialCost: 4000, netProfit: 13000 },
+      }),
+      makeOfflineVenue({
+        venueId: "cafe",
+        revenue: 1000,
+        totalQuantity: 1,
+        handmadeQuantity: 1,
+        otherQuantity: 0,
+        fees: makeFees({
+          commissionFee: 100,
+          logisticsFee: 50,
+          inboundShippingFee: 330,
+          adFee: 19,
+        }),
+        profit: { profit: 501, materialCost: 203, netProfit: 298 },
+      }),
+    ];
+    const naverWithInbound: NaverData = {
+      ...naverData,
+      fees: { ...naverData.fees, inboundShippingFee: 40 },
+    };
+    const coupangWithInbound: CoupangData = {
+      ...coupangData,
+      fees: { ...coupangData.fees, inboundShippingFee: 5000 },
+    };
+
+    const result = calcOverallSummary(
+      naverWithInbound,
+      coupangWithInbound,
+      venues,
+      1234,
+    );
+
+    expect(result).toEqual({
+      totalRevenue: 231000, // 100000+80000+30000+20000+1000
+      totalCommissionFee: 17100, // 5000+4000+5000+3000+100
+      totalLogisticsFee: 6650, // 3000+2000+700+900+50
+      totalInboundShippingFee: 5700, // 40+5000+110+220+330
+      totalAdFee: 1549, // 1000+500+13+17+19
+      totalProfit: 207001, // 91000+73500+25000+17000+501
+      totalMaterialCost: 34303, // 14100+9000+7000+4000+203
+      marketingCost: 1234,
+      totalNetProfit: 171464, // 76900+64500+18000+13000+298-1234
+      totalQuantity: 26, // 10+8+3+4+1
+      handmadeQuantity: 18, // 8+6+2+1+1
+      otherQuantity: 8, // 2+2+1+3+0
+    });
+  });
+
+  test("오프라인 입점처가 없으면 모든 합계 필드가 온라인 합계와 같다", () => {
+    const result = calcOverallSummary(naverData, coupangData, [], 0);
+    expect(result).toEqual({
+      totalRevenue: 180000,
+      totalCommissionFee: 9000,
+      totalLogisticsFee: 5000,
+      totalInboundShippingFee: 0,
+      totalAdFee: 1500,
+      totalProfit: 164500,
+      totalMaterialCost: 23100,
+      marketingCost: 0,
+      totalNetProfit: 141400,
+      totalQuantity: 18,
+      handmadeQuantity: 14,
+      otherQuantity: 4,
+    });
+  });
+
   test("오프라인 입점처가 없으면 온라인만 합산한다", () => {
     const result = calcOverallSummary(naverData, coupangData, []);
     expect(result.totalRevenue).toBe(180000);
