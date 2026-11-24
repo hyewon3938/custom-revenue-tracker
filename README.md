@@ -196,15 +196,15 @@ Llama 모델이 간헐적으로 한자를 혼입하는 문제(예: `"相対적"`
 ### 아키텍처 레이어
 
 ```
-UI Layer (components/, app/page.tsx)
+UI Layer (components/, hooks/, app/**/page.tsx)
     ↓ calls
 API Layer (app/api/*/route.ts)
     ↓ calls
 Business Logic (lib/calculations/, lib/ai/)
     ↓ calls
-Data Layer (lib/storage/, lib/scrapers/)
+Data Layer (lib/storage/, lib/naver-api/, lib/coupang-api/, lib/scrapers/)
     ↓ calls
-Foundation (lib/types/, lib/config.ts, lib/utils/)
+Foundation (lib/types/, lib/config.ts, lib/constants.ts, lib/utils/)
 ```
 
 **핵심 원칙**: 상위 레이어가 하위만 호출. `calculations/` 디렉토리는 I/O 없는 순수 함수만 허용.
@@ -222,18 +222,17 @@ Foundation (lib/types/, lib/config.ts, lib/utils/)
 ### 테스트 커버리지
 
 ```bash
-npx vitest run   # 130개 테스트, 7개 테스트 파일
+npx vitest run   # 379개 테스트, 27개 테스트 파일
 ```
 
-| 테스트 파일 | 대상 | 테스트 수 |
-|------------|------|----------|
-| `profit.test.ts` | 이익 계산, 배송비 보정, 부자재비 | 29 |
-| `ranking.test.ts` | 플랫폼별/전체 랭킹, 매트릭스 | 22 |
-| `product.test.ts` | 상품 분류, 정규화, 유사도 매칭 | 36 |
-| `overview.test.ts` | 월별 개요 집계 | 13 |
-| `deep-merge.test.ts` | 중첩 객체 부분 업데이트 | 16 |
-| `format.test.ts` | 통화 포맷, 날짜 유틸 | 7 |
-| `sanitize.test.ts` | 한자→한글 치환, CJK 제거 | 7 |
+| 영역 | 대상 | 테스트 수 |
+|------|------|----------|
+| `lib/calculations/` | 이익 계산, 랭킹과 매트릭스, 상품 분류와 매핑, 월별 개요, 협찬 차감, 레포트 수정 후 재계산, 수량 편집 | 189 |
+| `lib/storage/` | 레포트 저장·조회·버전 복구, 파일 잠금, 저장 형식 마이그레이션, 입점처와 상품 매핑 저장 | 67 |
+| `lib/ai/` | 인사이트 프롬프트 생성, 응답 파싱, 한자·CJK 문자 정리 | 42 |
+| `lib/utils/` | 통화·날짜 포맷, 중첩 객체 병합, 재시도 요청, API 응답 생성 | 47 |
+| `lib/naver-api/`, `lib/scrapers/` | 주문 집계, 수집 기간 계산 | 19 |
+| `components/` | 차트 설정과 금액 포맷, 인사이트 카테고리 설정, 그리드 열 계산 | 15 |
 
 ### 새 기능 추가 순서
 

@@ -10,15 +10,15 @@
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  UI Layer (components/, app/page.tsx)            │  ← React 컴포넌트, 사용자 인터랙션
+│  UI Layer (components/, hooks/, app/**/page.tsx) │  ← React 컴포넌트, 사용자 인터랙션
 ├─────────────────────────────────────────────────┤
 │  API Layer (app/api/*/route.ts)                  │  ← HTTP 요청/응답, 입력 검증
 ├─────────────────────────────────────────────────┤
 │  Business Logic (lib/calculations/, lib/ai/)     │  ← 순수 함수, I/O 없음
 ├─────────────────────────────────────────────────┤
-│  Data Layer (lib/storage/, lib/scrapers/)         │  ← 파일 I/O, 외부 API, 웹 수집
+│  Data Layer (lib/storage/, lib/naver-api/, lib/coupang-api/, lib/scrapers/) │  ← 파일 I/O, 외부 API, 웹 수집
 ├─────────────────────────────────────────────────┤
-│  Foundation (lib/types/, lib/config.ts, lib/utils/) │  ← 타입, 상수, 유틸리티
+│  Foundation (lib/types/, lib/config.ts, lib/constants.ts, lib/utils/) │  ← 타입, 상수, 유틸리티
 └─────────────────────────────────────────────────┘
 ```
 
@@ -35,7 +35,10 @@
 | `lib/config.ts` | 환경변수 읽기, 상수 | 비즈니스 로직 |
 | `lib/calculations/` | 데이터 변환, 계산 | I/O, API 호출 |
 | `lib/storage/` | 파일 읽기/쓰기 | 계산 로직 |
-| `lib/scrapers/` | 웹 수집 | 데이터 저장 |
+| `lib/naver-api/`, `lib/coupang-api/` | 플랫폼 API 수집 | 데이터 저장 |
+| `lib/scrapers/` | 웹 수집, 수집 순서 조율 | 데이터 저장 |
+| `lib/utils/` | 포맷, 에러 메시지, 재시도 요청, API 응답 생성 | 비즈니스 로직 |
+| `hooks/` | 화면 상태와 API 호출 | 계산 로직, `storage` 직접 import |
 | `app/api/` | 요청 라우팅, 검증 | 직접 계산 |
 
 ---
@@ -284,9 +287,9 @@ export const EMPTY_FEES: PlatformFees = {
 
 | 우선순위 | 대상 | 이유 |
 |----------|------|------|
-| 높음 | `lib/calculations/` (profit, ranking, product, overview) | 순수 함수, 금액 계산이라 정확성 필수 |
-| 높음 | `lib/utils/` (format, deep-merge) | 유틸리티는 전체에 영향 |
-| 중간 | `lib/storage/` (report-store) | 파생 필드 재계산 로직 |
+| 높음 | `lib/calculations/` (profit, ranking, product, overview, report-update 등) | 순수 함수, 금액 계산이라 정확성 필수 |
+| 높음 | `lib/utils/` (format, deep-merge, fetch-with-retry, api-response) | 유틸리티는 전체에 영향 |
+| 중간 | `lib/storage/` (report-store, report-lock, report-migration, venue-store) | 파일 잠금, 버전 복구, 저장 형식 마이그레이션 |
 | 낮음 | `lib/scrapers/` | 외부 의존성(브라우저)이 커서 단위 테스트 어려움 |
 | 낮음 | 컴포넌트 | 이 프로젝트 규모에서 E2E보다 수동 확인이 효율적 |
 
