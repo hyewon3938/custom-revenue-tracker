@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildOverviewData } from "./overview";
+import { buildOverviewData, calcMarginRate } from "./overview";
 import type { MonthlyReport } from "@/lib/types";
 
 // ─── 테스트 픽스처 헬퍼 ────────────────────────────────────────────────────
@@ -115,6 +115,25 @@ function makeReport(overrides: {
     lastModifiedAt: "2026-01-15T00:00:00Z",
   };
 }
+
+// ─── calcMarginRate ─────────────────────────────────────────────────────────
+
+describe("calcMarginRate", () => {
+  test("순이익 ÷ 매출을 소수점 1자리 퍼센트로 반올림한다", () => {
+    expect(calcMarginRate(1, 3)).toBe(33.3);
+    expect(calcMarginRate(2, 3)).toBe(66.7);
+    expect(calcMarginRate(50000, 100000)).toBe(50);
+  });
+
+  test("순이익이 음수면 음수 마진율을 반환한다", () => {
+    expect(calcMarginRate(-1, 3)).toBe(-33.3);
+  });
+
+  test("매출이 0이거나 음수면 0을 반환한다", () => {
+    expect(calcMarginRate(1000, 0)).toBe(0);
+    expect(calcMarginRate(1000, -500)).toBe(0);
+  });
+});
 
 // ─── buildOverviewData ──────────────────────────────────────────────────────
 

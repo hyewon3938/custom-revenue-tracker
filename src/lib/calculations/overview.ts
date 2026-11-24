@@ -1,4 +1,13 @@
 import { MonthlyReport, MonthlyOverview, OverviewResponse } from "@/lib/types";
+import { pad } from "@/lib/utils/format";
+
+/**
+ * 순이익 ÷ 매출 마진율 (%, 소수점 1자리 반올림).
+ * 매출이 0 이하면 0.
+ */
+export function calcMarginRate(netProfit: number, revenue: number): number {
+  return revenue > 0 ? Math.round((netProfit / revenue) * 1000) / 10 : 0;
+}
 
 /**
  * MonthlyReport 배열 → 인사이트 차트용 개요 데이터로 집계.
@@ -10,18 +19,16 @@ export function buildOverviewData(reports: MonthlyReport[]): OverviewResponse {
   const months: MonthlyOverview[] = reports
     .map((r) => ({
       period: r.period,
-      label: `${r.period.year}.${String(r.period.month).padStart(2, "0")}`,
+      label: `${r.period.year}.${pad(r.period.month)}`,
       totalRevenue: r.summary.totalRevenue,
       totalNetProfit: r.summary.totalNetProfit,
       totalQuantity: r.summary.totalQuantity,
       handmadeQuantity: r.summary.handmadeQuantity,
       otherQuantity: r.summary.otherQuantity,
-      marginRate:
-        r.summary.totalRevenue > 0
-          ? Math.round(
-              (r.summary.totalNetProfit / r.summary.totalRevenue) * 1000
-            ) / 10
-          : 0,
+      marginRate: calcMarginRate(
+        r.summary.totalNetProfit,
+        r.summary.totalRevenue
+      ),
       naverRevenue: r.naver.revenue,
       coupangRevenue: r.coupang.revenue,
       offlineRevenue: r.offline.reduce(

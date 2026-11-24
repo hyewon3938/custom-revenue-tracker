@@ -1,5 +1,6 @@
 import type { SponsoredItem } from "@/lib/types";
 import { SPONSOR_SHIPPING_FEE } from "@/lib/config";
+import { VAT_MULTIPLIER } from "@/lib/constants";
 
 /**
  * 협찬 제품 1개당 비용 계산.
@@ -18,7 +19,7 @@ import { SPONSOR_SHIPPING_FEE } from "@/lib/config";
  *   여기에 포함하지 않음 (이중 차감 방지)
  */
 export function calcUnitSponsorshipCost(unitPrice: number): number {
-  return Math.round((unitPrice + SPONSOR_SHIPPING_FEE) * 1.1);
+  return Math.round((unitPrice + SPONSOR_SHIPPING_FEE) * VAT_MULTIPLIER);
 }
 
 /**
