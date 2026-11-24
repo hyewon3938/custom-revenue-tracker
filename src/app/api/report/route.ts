@@ -4,7 +4,11 @@ import {
   updateReport,
   listReports,
 } from "@/lib/storage/report-store";
-import { getErrorMessage } from "@/lib/utils/error";
+import {
+  errorJson,
+  serverErrorJson,
+  parseYearMonth,
+} from "@/lib/utils/api-response";
 
 /**
  * GET /api/report
@@ -24,28 +28,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(list);
     }
 
-    const year = parseInt(yearParam);
-    const month = parseInt(monthParam);
-
-    if (isNaN(year) || isNaN(month)) {
-      return NextResponse.json(
-        { error: "year, month는 숫자여야 합니다." },
-        { status: 400 }
-      );
+    const period = parseYearMonth(yearParam, monthParam);
+    if (!period) {
+      return errorJson("year, month는 숫자여야 합니다.", 400);
     }
+    const { year, month } = period;
 
     const report = await loadReport(year, month);
     if (!report) {
-      return NextResponse.json(
-        { error: `${year}년 ${month}월 레포트가 없습니다.` },
-        { status: 404 }
-      );
+      return errorJson(`${year}년 ${month}월 레포트가 없습니다.`, 404);
     }
 
     return NextResponse.json(report);
   } catch (error) {
-    const message = getErrorMessage(error, "조회 실패");
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorJson(error, "조회 실패");
   }
 }
 
@@ -73,10 +69,7 @@ export async function PATCH(request: NextRequest) {
     } = body;
 
     if (!year || !month) {
-      return NextResponse.json(
-        { error: "year, month 필드가 필요합니다." },
-        { status: 400 }
-      );
+      return errorJson("year, month 필드가 필요합니다.", 400);
     }
 
     const updated = await updateReport(year, month, {
@@ -92,7 +85,6 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    const message = getErrorMessage(error, "수정 실패");
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorJson(error, "수정 실패");
   }
 }

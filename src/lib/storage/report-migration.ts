@@ -1,11 +1,12 @@
 import { MonthlyReport } from "@/lib/types";
+import { GOSAN_VENUE_ID } from "@/lib/constants";
 
 /** 기존 레포트 마이그레이션 (입력 객체를 직접 변경해 그대로 반환) */
 export function migrateReport(raw: Record<string, unknown>): MonthlyReport {
   // offline이 배열이 아닌 경우 (구버전) → 배열로 래핑
   if (raw.offline && !Array.isArray(raw.offline)) {
     const single = raw.offline as Record<string, unknown>;
-    if (!single.venueId) single.venueId = "gosan";
+    if (!single.venueId) single.venueId = GOSAN_VENUE_ID;
     raw.offline = [single];
   }
   // NaverData에 shippingCollected/payerCount 없는 경우 기본값 추가

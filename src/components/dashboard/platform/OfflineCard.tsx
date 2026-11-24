@@ -3,14 +3,12 @@
 import { useCallback } from "react";
 import { OfflineData, ProductMatrixRow } from "@/lib/types";
 import { toProductSales } from "@/lib/calculations/platform-edit";
+import { GOSAN_VENUE_ID } from "@/lib/constants";
 import Card from "@/components/ui/Card";
 import EditRow from "@/components/ui/EditRow";
 import ProductQtyEditor from "../ProductQtyEditor";
 import GosanTooltip from "./GosanTooltip";
 import ProfitBlock from "./ProfitBlock";
-
-/** 계산 방식 안내 툴팁을 붙이는 입점처 id */
-const GOSAN_VENUE_ID = "gosan";
 
 interface Props {
   data: OfflineData;

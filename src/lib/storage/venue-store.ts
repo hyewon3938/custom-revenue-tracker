@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { VenueInfo } from "@/lib/types";
+import { GOSAN_VENUE_ID } from "@/lib/constants";
 
 interface VenueRegistry {
   venues: VenueInfo[];
@@ -18,7 +19,7 @@ export async function loadVenues(): Promise<VenueRegistry> {
     const registry: VenueRegistry = {
       venues: [
         {
-          id: "gosan",
+          id: GOSAN_VENUE_ID,
           name: "고산의낮",
           createdAt: "2024-11-01T00:00:00.000Z",
         },
