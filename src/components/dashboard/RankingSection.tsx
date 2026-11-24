@@ -1,17 +1,19 @@
 import { ProductRankEntry } from "@/lib/types";
 import Card from "@/components/ui/Card";
 
+// 1위: 금메달, 2위: 은메달, 3위: 동메달(연한), 그 외: 연회색
+const RANK_BADGE_COLORS = [
+  "bg-yellow-400 text-yellow-900",
+  "bg-gray-300 text-gray-600",
+  "bg-amber-200 text-amber-800",
+];
+const RANK_BADGE_DEFAULT_COLOR = "bg-gray-100 text-gray-400";
+
 function RankBadge({ rank }: { rank: number }) {
-  // 1위: 금메달, 2위: 은메달, 3위: 동메달(연한), 그 외: 연회색
-  const colors = [
-    "bg-yellow-400 text-yellow-900",
-    "bg-gray-300 text-gray-600",
-    "bg-amber-200 text-amber-800",
-  ];
   return (
     <span
       className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold shrink-0 ${
-        colors[rank - 1] ?? "bg-gray-100 text-gray-400"
+        RANK_BADGE_COLORS[rank - 1] ?? RANK_BADGE_DEFAULT_COLOR
       }`}
     >
       {rank}
