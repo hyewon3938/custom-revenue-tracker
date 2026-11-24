@@ -9,6 +9,7 @@ interface ChartProps {
   data: MonthlyOverview[];
 }
 
+// 높이는 chart-config 의 CHART_HEIGHT(300)와 맞춘다. Tailwind 가 클래스를 찾도록 문자열로 둔다.
 function ChartSkeleton() {
   return <div className="h-[300px] rounded-xl bg-gray-100 animate-pulse" />;
 }

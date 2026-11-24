@@ -13,11 +13,13 @@ import {
 } from "recharts";
 import { MonthlyOverview } from "@/lib/types";
 import {
+  CHART_HEIGHT,
   CHART_MARGIN,
   GRID_PROPS,
   X_TICK,
   Y_TICK,
   LABEL_STYLE,
+  LABEL_FILL,
 } from "./chart-config";
 
 interface Props {
@@ -26,7 +28,7 @@ interface Props {
 
 export default function QuantityChart({ data }: Props) {
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
       <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid {...GRID_PROPS} />
         <XAxis dataKey="label" tick={X_TICK} />
@@ -54,7 +56,7 @@ export default function QuantityChart({ data }: Props) {
             dataKey="totalQuantity"
             position="top"
             formatter={(v: unknown) => `${(v as number) ?? 0}개`}
-            style={{ ...LABEL_STYLE, fill: "#374151" }}
+            style={{ ...LABEL_STYLE, fill: LABEL_FILL }}
           />
         </Bar>
       </BarChart>
