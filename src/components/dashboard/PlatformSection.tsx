@@ -1,300 +1,20 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState } from "react";
 import {
   NaverData,
   CoupangData,
   OfflineData,
   ProductMatrixRow,
-  ProductSales,
 } from "@/lib/types";
-import Card from "@/components/ui/Card";
-import Row from "@/components/ui/Row";
-import EditRow from "@/components/ui/EditRow";
-import KRWText from "@/components/ui/KRWText";
-import ProductQtyEditor from "./ProductQtyEditor";
 import VenueModal from "./VenueModal";
+import NaverCard from "./platform/NaverCard";
+import CoupangCard from "./platform/CoupangCard";
+import OfflineCard from "./platform/OfflineCard";
+import { getGridCols } from "./platform/grid-cols";
 
-// ─── 로컬 컴포넌트 ──────────────────────────────────────────────────────────
-
-function NetProfitRow({ value }: { value: number }) {
-  return (
-    <div className="flex justify-between items-center pt-2">
-      <span className="text-sm font-semibold text-gray-700">순이익</span>
-      <span
-        className={`text-sm font-bold ${
-          value >= 0 ? "text-brand-500" : "text-red-500"
-        }`}
-      >
-        <KRWText n={value} />
-      </span>
-    </div>
-  );
-}
-
-// ─── 네이버 카드 ────────────────────────────────────────────────────────────
-
-function NaverCard({
-  data,
-}: //onUpdate,
-{
-  data: NaverData;
-  onUpdate: (patch: object) => Promise<void>;
-}) {
-  return (
-    <Card>
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="font-semibold text-gray-900">네이버 스마트스토어</h4>
-        <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-          N
-        </span>
-      </div>
-
-      <Row label="매출" value={<KRWText n={data.revenue} />} />
-      <Row label="정산금" value={<KRWText n={data.fees.settlementAmount} />} />
-      <Row label="수수료" value={<KRWText n={data.fees.commissionFee} />} />
-      <Row label="배송비" value={<KRWText n={data.fees.logisticsFee} />} />
-
-      <div className="mt-2 pt-1">
-        <Row label="이익" value={<KRWText n={data.profit.profit} />} />
-        <Row
-          label="부자재비"
-          value={<KRWText n={data.profit.materialCost} />}
-        />
-        <NetProfitRow value={data.profit.netProfit} />
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-warm-100">
-        <p className="text-xs text-gray-400 mb-1.5">판매량</p>
-        <p className="text-sm text-gray-700">
-          전체 {data.totalQuantity}개 · 끈갈피 {data.handmadeQuantity}개
-        </p>
-        {data.shippingStats.regularCount + data.shippingStats.freeCount > 0 && (
-          <p className="text-xs text-gray-400 mt-1">
-            일반배송 {data.shippingStats.regularCount}건 · 무료배송{" "}
-            {data.shippingStats.freeCount}건
-          </p>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-// ─── 쿠팡 카드 ─────────────────────────────────────────────────────────────
-
-/** 쿠팡 데이터 제공 시작: 2025년 3월. 그 이전 월은 판매량 수기 입력 모드. */
-function isCoupangManual(year: number, month: number) {
-  return year < 2025 || (year === 2025 && month < 3);
-}
-
-function CoupangCard({
-  data,
-  year,
-  month,
-  productMatrix,
-  onUpdate,
-}: {
-  data: CoupangData;
-  year: number;
-  month: number;
-  productMatrix: ProductMatrixRow[];
-  onUpdate: (patch: object) => Promise<void>;
-}) {
-  const isManual = isCoupangManual(year, month);
-
-  // 수기 모드: productMatrix에 없는 기존 쿠팡 상품도 포함
-  const editList = useMemo(() => {
-    if (!isManual) return [];
-    const knownNames = new Set(productMatrix.map((r) => r.productName));
-    const extras: ProductMatrixRow[] = data.products
-      .filter((p) => !knownNames.has(p.productName))
-      .map((p) => ({
-        productName: p.productName,
-        category: p.category,
-        naver: 0,
-        coupang: p.quantity,
-        offline: 0,
-        total: p.quantity,
-      }));
-    return [...productMatrix, ...extras];
-  }, [isManual, productMatrix, data.products]);
-
-  const saveProducts = useCallback(
-    async (quantities: Record<string, number>) => {
-      const products: ProductSales[] = editList
-        .filter((row) => (quantities[row.productName] ?? 0) > 0)
-        .map((row) => ({
-          productName: row.productName,
-          category: row.category,
-          platform: "coupang" as const,
-          quantity: quantities[row.productName],
-        }));
-      await onUpdate({ coupang: { products } });
-    },
-    [editList, onUpdate],
-  );
-
-  return (
-    <Card>
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="font-semibold text-gray-900">쿠팡</h4>
-        <div className="flex items-center gap-1.5">
-          {isManual && (
-            <span className="text-xs font-medium bg-brand-50 text-brand-500 px-2 py-0.5 rounded-full">
-              수기
-            </span>
-          )}
-          <span className="text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-            C
-          </span>
-        </div>
-      </div>
-
-      <Row label="매출" value={<KRWText n={data.revenue} />} />
-      <Row label="판매수수료" value={<KRWText n={data.fees.commissionFee} />} />
-      <Row
-        label="풀필먼트 물류비"
-        value={<KRWText n={data.fees.logisticsFee} />}
-      />
-      <EditRow
-        label="입고 배송비"
-        value={data.fees.inboundShippingFee}
-        onSave={(v) =>
-          onUpdate({ coupang: { fees: { inboundShippingFee: v } } })
-        }
-      />
-      <Row label="광고비" value={<KRWText n={data.fees.adFee} />} />
-
-      <div className="mt-2 pt-1">
-        <Row label="이익" value={<KRWText n={data.profit.profit} />} />
-        <Row
-          label="부자재비"
-          value={<KRWText n={data.profit.materialCost} />}
-        />
-        <NetProfitRow value={data.profit.netProfit} />
-      </div>
-
-      {isManual ? (
-        <ProductQtyEditor
-          label="판매량"
-          savedItems={data.products}
-          editList={editList}
-          totalQuantity={data.totalQuantity}
-          handmadeQuantity={data.handmadeQuantity}
-          summaryPrefix="전체"
-          onSave={saveProducts}
-        />
-      ) : (
-        <div className="mt-3 pt-3 border-t border-warm-100">
-          <p className="text-xs text-gray-400 mb-1.5">판매량</p>
-          <p className="text-sm text-gray-700">
-            전체 {data.totalQuantity}개 · 끈갈피 {data.handmadeQuantity}개
-          </p>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ─── 오프라인 카드 ──────────────────────────────────────────────────────────
-
-function OfflineCard({
-  data,
-  productMatrix,
-  onUpdate,
-}: {
-  data: OfflineData;
-  productMatrix: ProductMatrixRow[];
-  onUpdate: (patch: object) => Promise<void>;
-}) {
-  const saveProducts = useCallback(
-    async (quantities: Record<string, number>) => {
-      const products: ProductSales[] = productMatrix
-        .filter((row) => (quantities[row.productName] ?? 0) > 0)
-        .map((row) => ({
-          productName: row.productName,
-          category: row.category,
-          platform: "offline" as const,
-          quantity: quantities[row.productName],
-        }));
-      await onUpdate({ offline: { products } });
-    },
-    [productMatrix, onUpdate],
-  );
-
-  const isGosan = data.venueId === "gosan";
-
-  return (
-    <Card>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-1.5">
-          <h4 className="font-semibold text-gray-900">{data.venueName}</h4>
-          {isGosan && (
-            <div className="relative group">
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold cursor-default select-none">
-                i
-              </span>
-              <div className="invisible group-hover:visible absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 z-10 rounded-lg bg-gray-800 text-white text-xs p-3 shadow-lg pointer-events-none">
-                <p className="font-semibold mb-1.5">고산의낮 계산 방식</p>
-                <ul className="space-y-1 text-gray-200 list-disc list-inside">
-                  <li>매출은 할인가(입점수수료 차감 후)의 실수령액</li>
-                  <li>부자재비 = (매출 + 입점수수료) × 15%로 정가 기준 계산</li>
-                  <li>입점수수료는 별도로 차감되지 않으므로 0으로 입력</li>
-                </ul>
-                <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-gray-800" />
-              </div>
-            </div>
-          )}
-        </div>
-        <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-          OFF
-        </span>
-      </div>
-
-      <EditRow
-        label="매출"
-        value={data.revenue}
-        onSave={(v) => onUpdate({ offline: { revenue: v } })}
-      />
-      <EditRow
-        label="입점 수수료"
-        value={data.fees.commissionFee}
-        onSave={(v) => onUpdate({ offline: { fees: { commissionFee: v } } })}
-      />
-      <EditRow
-        label="입고 배송비"
-        value={data.fees.logisticsFee}
-        onSave={(v) => onUpdate({ offline: { fees: { logisticsFee: v } } })}
-      />
-      <EditRow
-        label="광고비"
-        value={data.fees.adFee}
-        onSave={(v) => onUpdate({ offline: { fees: { adFee: v } } })}
-      />
-
-      <div className="mt-3 pt-3 border-t border-warm-100">
-        <Row label="이익" value={<KRWText n={data.profit.profit} />} />
-        <Row
-          label="부자재비"
-          value={<KRWText n={data.profit.materialCost} />}
-        />
-        <NetProfitRow value={data.profit.netProfit} />
-      </div>
-
-      <ProductQtyEditor
-        label="판매량"
-        savedItems={data.products}
-        editList={productMatrix}
-        totalQuantity={data.totalQuantity}
-        handmadeQuantity={data.handmadeQuantity}
-        summaryPrefix="전체"
-        onSave={saveProducts}
-      />
-    </Card>
-  );
-}
-
-// ─── 메인 섹션 ──────────────────────────────────────────────────────────────
+/** 항상 표시되는 온라인 카드 수 (네이버 + 쿠팡) */
+const ONLINE_CARD_COUNT = 2;
 
 interface Props {
   year: number;
@@ -318,16 +38,7 @@ export default function PlatformSection({
   const [venueModalOpen, setVenueModalOpen] = useState(false);
 
   // 카드 수에 따른 그리드 레이아웃
-  // 3개: 한 줄 3등분 / 4개: 한 줄 4등분 / 5개+: 한 줄 3개씩
-  const totalCards = 2 + offline.length;
-  const gridCols =
-    totalCards <= 2
-      ? "grid-cols-1 md:grid-cols-2"
-      : totalCards === 3
-        ? "grid-cols-1 md:grid-cols-3"
-        : totalCards === 4
-          ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
-          : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+  const gridCols = getGridCols(ONLINE_CARD_COUNT + offline.length);
 
   return (
     <section>
@@ -343,7 +54,7 @@ export default function PlatformSection({
         </button>
       </div>
       <div className={`grid ${gridCols} gap-4`}>
-        <NaverCard data={naver} onUpdate={onUpdate} />
+        <NaverCard data={naver} />
         <CoupangCard
           data={coupang}
           year={year}

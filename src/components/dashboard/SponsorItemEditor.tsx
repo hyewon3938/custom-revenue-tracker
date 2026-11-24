@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { SponsoredItem, ProductMatrixRow } from "@/lib/types";
+import { parseQty } from "@/lib/calculations/platform-edit";
+import { useFocusHighlight } from "./platform/useFocusHighlight";
 
 interface Props {
   savedItems: SponsoredItem[];
@@ -19,17 +21,20 @@ export default function SponsorItemEditor({
   onSave,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [fields, setFields] = useState<Record<string, { quantity: number; unitPrice: number }>>(
-    () => toFields(savedItems)
-  );
+  const [fields, setFields] = useState<
+    Record<string, { quantity: number; unitPrice: number }>
+  >(() => toFields(savedItems));
 
   useEffect(() => {
     setFields(toFields(savedItems));
   }, [savedItems]);
 
   const sorted = useMemo(
-    () => [...editList].sort((a, b) => a.productName.localeCompare(b.productName, "ko")),
-    [editList]
+    () =>
+      [...editList].sort((a, b) =>
+        a.productName.localeCompare(b.productName, "ko"),
+      ),
+    [editList],
   );
 
   const handleBlur = useCallback(
@@ -58,7 +63,7 @@ export default function SponsorItemEditor({
 
       onSave(items);
     },
-    [fields, savedItems, editList, onSave]
+    [fields, savedItems, editList, onSave],
   );
 
   return (
@@ -80,7 +85,11 @@ export default function SponsorItemEditor({
             stroke="currentColor"
             strokeWidth={2}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M19 9l-7 7-7-7"
+            />
           </svg>
         </button>
       ) : (
@@ -96,7 +105,9 @@ export default function SponsorItemEditor({
           <div className="flex items-center gap-2 px-2 mb-1">
             <span className="flex-1 text-xs text-gray-400">상품</span>
             <span className="w-14 text-right text-xs text-gray-400">수량</span>
-            <span className="w-24 text-right text-xs text-gray-400">단가(원)</span>
+            <span className="w-24 text-right text-xs text-gray-400">
+              단가(원)
+            </span>
           </div>
           {sorted.map((row) => {
             const f = fields[row.productName] ?? { quantity: 0, unitPrice: 0 };
@@ -110,7 +121,10 @@ export default function SponsorItemEditor({
                   setFields((prev) => ({
                     ...prev,
                     [row.productName]: {
-                      ...(prev[row.productName] ?? { quantity: 0, unitPrice: 0 }),
+                      ...(prev[row.productName] ?? {
+                        quantity: 0,
+                        unitPrice: 0,
+                      }),
                       quantity: v,
                     },
                   }))
@@ -119,13 +133,20 @@ export default function SponsorItemEditor({
                   setFields((prev) => ({
                     ...prev,
                     [row.productName]: {
-                      ...(prev[row.productName] ?? { quantity: 0, unitPrice: 0 }),
+                      ...(prev[row.productName] ?? {
+                        quantity: 0,
+                        unitPrice: 0,
+                      }),
                       unitPrice: v,
                     },
                   }))
                 }
-                onBlurQuantity={(v) => handleBlur(row.productName, "quantity", v)}
-                onBlurUnitPrice={(v) => handleBlur(row.productName, "unitPrice", v)}
+                onBlurQuantity={(v) =>
+                  handleBlur(row.productName, "quantity", v)
+                }
+                onBlurUnitPrice={(v) =>
+                  handleBlur(row.productName, "unitPrice", v)
+                }
               />
             );
           })}
@@ -138,10 +159,13 @@ export default function SponsorItemEditor({
 // ─── 헬퍼 ─────────────────────────────────────────────────────────────────
 
 function toFields(
-  items: SponsoredItem[]
+  items: SponsoredItem[],
 ): Record<string, { quantity: number; unitPrice: number }> {
   return Object.fromEntries(
-    items.map((i) => [i.productName, { quantity: i.quantity, unitPrice: i.unitPrice ?? 0 }])
+    items.map((i) => [
+      i.productName,
+      { quantity: i.quantity, unitPrice: i.unitPrice ?? 0 },
+    ]),
   );
 }
 
@@ -164,18 +188,15 @@ function SponsorInputRow({
   onBlurQuantity: (v: number) => void;
   onBlurUnitPrice: (v: number) => void;
 }) {
-  const [focused, setFocused] = useState(false);
+  const { focused, setFocused, onMouseEnter, onMouseLeave } =
+    useFocusHighlight("var(--warm-100)");
 
   return (
     <div
       className="flex items-center gap-2 px-2 py-1.5 -mx-2 rounded-lg transition-colors"
       style={{ backgroundColor: focused ? "var(--brand-50)" : undefined }}
-      onMouseEnter={(e) => {
-        if (!focused) e.currentTarget.style.backgroundColor = "var(--warm-100)";
-      }}
-      onMouseLeave={(e) => {
-        if (!focused) e.currentTarget.style.backgroundColor = "";
-      }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <span
         className="text-xs truncate flex-1 transition-colors"
@@ -188,14 +209,16 @@ function SponsorInputRow({
         type="number"
         min="0"
         value={quantity}
-        onChange={(e) => onChangeQuantity(Math.max(0, Number(e.target.value)))}
+        onChange={(e) => onChangeQuantity(parseQty(e.target.value))}
         onFocus={() => setFocused(true)}
         onBlur={(e) => {
           setFocused(false);
-          onBlurQuantity(Math.max(0, Number(e.target.value)));
+          onBlurQuantity(parseQty(e.target.value));
         }}
         className="w-14 shrink-0 text-right text-xs border rounded px-2 py-1 focus:outline-none transition-colors"
-        style={{ borderColor: focused ? "var(--brand-400)" : "var(--warm-200)" }}
+        style={{
+          borderColor: focused ? "var(--brand-400)" : "var(--warm-200)",
+        }}
       />
       <input
         type="number"
@@ -203,14 +226,16 @@ function SponsorInputRow({
         step="100"
         value={unitPrice || ""}
         placeholder="단가"
-        onChange={(e) => onChangeUnitPrice(Math.max(0, Number(e.target.value)))}
+        onChange={(e) => onChangeUnitPrice(parseQty(e.target.value))}
         onFocus={() => setFocused(true)}
         onBlur={(e) => {
           setFocused(false);
-          onBlurUnitPrice(Math.max(0, Number(e.target.value)));
+          onBlurUnitPrice(parseQty(e.target.value));
         }}
         className="w-24 shrink-0 text-right text-xs border rounded px-2 py-1 focus:outline-none transition-colors"
-        style={{ borderColor: focused ? "var(--brand-400)" : "var(--warm-200)" }}
+        style={{
+          borderColor: focused ? "var(--brand-400)" : "var(--warm-200)",
+        }}
       />
     </div>
   );
